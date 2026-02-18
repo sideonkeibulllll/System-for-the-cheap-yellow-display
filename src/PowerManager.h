@@ -79,7 +79,8 @@ public:
     void forceWakeup();
     
     power_state_t getState() { return _status.state; }
-    power_status_t getStatus() { return _status; }
+    power_status_t& getStatus() { return _status; }
+    const power_status_t& getStatus() const { return _status; }
     
     void resetIdleTimer();
     uint32_t getIdleTimeMs() { return _status.idleTimeMs; }
