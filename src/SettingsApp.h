@@ -18,6 +18,12 @@ private:
     backlight_mode_t _savedBacklightMode;
     bool _sliderDragging;
     
+    uint32_t _lastUpdateMs;
+    uint8_t _lastDisplayedBrightness;
+    uint8_t _lastDisplayedMode;
+    uint16_t _lastDisplayedLdr;
+    uint32_t _lastDisplayedIdle;
+    
     static void brightness_slider_cb(lv_event_t* e);
     static void backlight_mode_cb(lv_event_t* e);
     static void back_btn_cb(lv_event_t* e);

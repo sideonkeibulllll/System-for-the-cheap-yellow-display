@@ -202,8 +202,8 @@ void PowerManager::updateBacklightAuto() {
 }
 
 uint8_t PowerManager::calculateBacklightFromLDR(uint16_t ldrValue) {
-    uint16_t minLDR = 500;
-    uint16_t maxLDR = 3500;
+    uint16_t minLDR = 100;
+    uint16_t maxLDR = 4000;
     
     ldrValue = constrain(ldrValue, minLDR, maxLDR);
     
@@ -254,12 +254,8 @@ void PowerManager::updateIdleState() {
     } else if (idleMs >= POWER_IDLE_TIMEOUT_MS) {
         if (_status.state == POWER_STATE_ACTIVE) {
             _status.state = POWER_STATE_IDLE;
-            setCpuMode(POWER_MODE_BALANCED);
             
-            if (_status.backlightMode == BACKLIGHT_MODE_MANUAL) {
-                bsp_backlight_set(POWER_BACKLIGHT_DIM);
-                _status.backlightLevel = POWER_BACKLIGHT_DIM;
-            } else if (_status.backlightMode == BACKLIGHT_MODE_AUTO) {
+            if (_status.backlightMode == BACKLIGHT_MODE_AUTO) {
                 uint8_t dimLevel = (_autoMinLevel + POWER_BACKLIGHT_DIM) / 2;
                 bsp_backlight_set(dimLevel);
                 _status.backlightLevel = dimLevel;
@@ -274,12 +270,8 @@ void PowerManager::updateIdleState() {
     } else {
         if (_status.state == POWER_STATE_IDLE) {
             _status.state = POWER_STATE_ACTIVE;
-            setCpuMode(POWER_MODE_HIGH);
             
-            if (_status.backlightMode == BACKLIGHT_MODE_MANUAL) {
-                bsp_backlight_set(POWER_BACKLIGHT_MAX);
-                _status.backlightLevel = POWER_BACKLIGHT_MAX;
-            } else if (_status.backlightMode == BACKLIGHT_MODE_AUTO) {
+            if (_status.backlightMode == BACKLIGHT_MODE_AUTO) {
                 updateBacklightAuto();
             }
             
@@ -298,8 +290,6 @@ void PowerManager::enterSleep() {
     _status.state = POWER_STATE_SLEEP;
     
     bsp_backlight_set(0);
-    
-    setCpuMode(POWER_MODE_LOW);
     
     if (_stateCallback) {
         _stateCallback(POWER_STATE_SLEEP);
@@ -323,17 +313,14 @@ void PowerManager::exitSleep() {
     _status.state = POWER_STATE_ACTIVE;
     _status.lastActivityMs = millis();
     
-    setCpuMode(POWER_MODE_HIGH);
-    
-    if (_status.backlightMode == BACKLIGHT_MODE_MANUAL) {
-        bsp_backlight_set(POWER_BACKLIGHT_MAX);
-        _status.backlightLevel = POWER_BACKLIGHT_MAX;
-    } else if (_status.backlightMode == BACKLIGHT_MODE_AUTO) {
+    if (_status.backlightMode == BACKLIGHT_MODE_AUTO) {
         updateBacklightAuto();
+    } else if (_status.backlightMode == BACKLIGHT_MODE_MANUAL) {
+        bsp_backlight_set(_status.backlightLevel);
     } else {
         _status.backlightMode = BACKLIGHT_MODE_MANUAL;
-        bsp_backlight_set(POWER_BACKLIGHT_MAX);
         _status.backlightLevel = POWER_BACKLIGHT_MAX;
+        bsp_backlight_set(POWER_BACKLIGHT_MAX);
     }
     
     Serial.println("[Power] Wakeup complete - ACTIVE state");
@@ -359,11 +346,8 @@ void PowerManager::resetIdleTimer() {
     
     if (_status.state == POWER_STATE_IDLE) {
         _status.state = POWER_STATE_ACTIVE;
-        setCpuMode(POWER_MODE_HIGH);
         
-        if (_status.backlightMode == BACKLIGHT_MODE_MANUAL) {
-            setBacklight(POWER_BACKLIGHT_MAX);
-        } else if (_status.backlightMode == BACKLIGHT_MODE_AUTO) {
+        if (_status.backlightMode == BACKLIGHT_MODE_AUTO) {
             updateBacklightAuto();
         }
         

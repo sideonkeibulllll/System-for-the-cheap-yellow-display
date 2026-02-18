@@ -11,6 +11,11 @@ SettingsApp::SettingsApp() : BaseApp("Settings") {
     _savedBrightness = 200;
     _savedBacklightMode = BACKLIGHT_MODE_MANUAL;
     _sliderDragging = false;
+    _lastUpdateMs = 0;
+    _lastDisplayedBrightness = 0;
+    _lastDisplayedMode = 255;
+    _lastDisplayedLdr = 0;
+    _lastDisplayedIdle = 0;
 }
 
 bool SettingsApp::createUI() {
@@ -131,27 +136,46 @@ void SettingsApp::back_btn_cb(lv_event_t* e) {
 }
 
 void SettingsApp::onUpdate() {
-    power_status_t status = Power.getStatus();
+    uint32_t now = millis();
     
-    const char* stateStr = status.state == POWER_STATE_ACTIVE ? "Active" :
-                           status.state == POWER_STATE_IDLE ? "Idle" : "Sleep";
+    if (now - _lastUpdateMs < 500) {
+        return;
+    }
+    _lastUpdateMs = now;
     
-    lv_label_set_text_fmt(labelPowerStatus, 
-        "State: %s\nIdle: %us\nLDR: %d",
-        stateStr,
-        status.idleTimeMs / 1000,
-        status.ldrValue
-    );
+    power_status_t& status = Power.getStatus();
     
-    lv_label_set_text_fmt(labelCPUMode, "%d MHz", getCpuFrequencyMhz());
+    uint16_t currentLdr = status.ldrValue;
+    uint32_t currentIdle = status.idleTimeMs / 1000;
+    uint8_t currentBrightness = status.backlightLevel;
+    uint8_t currentMode = status.backlightMode;
     
-    if (!_sliderDragging && status.backlightMode == BACKLIGHT_MODE_MANUAL) {
-        lv_slider_set_value(sliderBrightness, status.backlightLevel, LV_ANIM_OFF);
-        lv_label_set_text_fmt(labelBrightness, "%d", status.backlightLevel);
-        _savedBrightness = status.backlightLevel;
+    if (currentLdr != _lastDisplayedLdr || currentIdle != _lastDisplayedIdle) {
+        const char* stateStr = status.state == POWER_STATE_ACTIVE ? "Active" :
+                               status.state == POWER_STATE_IDLE ? "Idle" : "Sleep";
+        
+        lv_label_set_text_fmt(labelPowerStatus, 
+            "State: %s\nIdle: %us\nLDR: %d",
+            stateStr,
+            currentIdle,
+            currentLdr
+        );
+        _lastDisplayedLdr = currentLdr;
+        _lastDisplayedIdle = currentIdle;
     }
     
-    lv_dropdown_set_selected(ddBacklightMode, status.backlightMode);
+    if (!_sliderDragging && currentMode == BACKLIGHT_MODE_MANUAL && 
+        currentBrightness != _lastDisplayedBrightness) {
+        lv_slider_set_value(sliderBrightness, currentBrightness, LV_ANIM_OFF);
+        lv_label_set_text_fmt(labelBrightness, "%d", currentBrightness);
+        _savedBrightness = currentBrightness;
+        _lastDisplayedBrightness = currentBrightness;
+    }
+    
+    if (currentMode != _lastDisplayedMode) {
+        lv_dropdown_set_selected(ddBacklightMode, currentMode);
+        _lastDisplayedMode = currentMode;
+    }
 }
 
 void SettingsApp::saveState() {
