@@ -14,8 +14,11 @@
 #define TFT_DC    2
 #define TFT_RST  -1
 
-#define TFT_BL   21
-#define TFT_BACKLIGHT_ON HIGH
+// Note: TFT_eSPI will set backlight to HIGH on tft.begin() if TFT_BL is defined.
+// This conflicts with our LEDC PWM control in BSP.cpp.
+// Comment out TFT_BL to let PWM handle backlight dimming.
+// #define TFT_BL   21
+// #define TFT_BACKLIGHT_ON HIGH
 
 #define LOAD_GLCD
 #define LOAD_FONT2

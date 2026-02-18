@@ -4,7 +4,6 @@
 #include "PowerManager.h"
 #include <TFT_eSPI.h>
 #include <XPT2046_Touchscreen.h>
-#include <driver/ledc.h>
 #include <SPIFFS.h>
 
 static TFT_eSPI tft = TFT_eSPI();
@@ -29,26 +28,13 @@ static int16_t lastX = 0;
 static int16_t lastY = 0;
 
 static void initPWM() {
-    ledc_timer_config_t timer_conf = {
-        .speed_mode = LEDC_LOW_SPEED_MODE,
-        .duty_resolution = LEDC_TIMER_8_BIT,
-        .timer_num = LEDC_TIMER_0,
-        .freq_hz = 5000,
-        .clk_cfg = LEDC_AUTO_CLK
-    };
-    ledc_timer_config(&timer_conf);
+    Serial.println("[BSP] Initializing PWM backlight on GPIO 21...");
     
-    ledc_channel_config_t ledc_conf = {
-        .gpio_num = (gpio_num_t)BSP_BACKLIGHT_PIN,
-        .speed_mode = LEDC_LOW_SPEED_MODE,
-        .channel = LEDC_CHANNEL_0,
-        .intr_type = LEDC_INTR_DISABLE,
-        .timer_sel = LEDC_TIMER_0,
-        .duty = 255,
-        .hpoint = 0,
-        .flags = {.output_invert = 0}
-    };
-    ledc_channel_config(&ledc_conf);
+    ledcSetup(0, 5000, 8);
+    ledcAttachPin(BSP_BACKLIGHT_PIN, 0);
+    
+    Serial.printf("  PWM frequency: 5000 Hz, 8-bit resolution\n");
+    Serial.printf("  Channel: 0, Pin: %d\n", BSP_BACKLIGHT_PIN);
 }
 
 void IRAM_ATTR bsp_display_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p) {
@@ -203,8 +189,6 @@ void bsp_init(void) {
     Serial.println("\n[BSP] Board Support Package Init");
     Serial.println("=================================");
     
-    initPWM();
-    
     pinMode(BSP_LED_RED, OUTPUT);
     pinMode(BSP_LED_GREEN, OUTPUT);
     pinMode(BSP_LED_BLUE, OUTPUT);
@@ -213,6 +197,9 @@ void bsp_init(void) {
     digitalWrite(BSP_LED_BLUE, HIGH);
     
     bsp_display_init();
+    
+    initPWM();
+    
     bsp_touch_init();
     bsp_storage_init();
     
@@ -223,8 +210,7 @@ void bsp_init(void) {
 }
 
 void bsp_backlight_set(uint8_t level) {
-    ledc_set_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, level);
-    ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0);
+    ledcWrite(0, level);
     currentBacklight = level;
 }
 
