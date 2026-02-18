@@ -5,6 +5,7 @@
 #include <lvgl.h>
 #include <SPI.h>
 #include <SD.h>
+#include <XPT2046_Touchscreen.h>
 
 #define BSP_DISPLAY_WIDTH  320
 #define BSP_DISPLAY_HEIGHT 240
@@ -31,6 +32,8 @@ typedef enum {
     BSP_ERR_SD_INIT,
     BSP_ERR_CONFIG_LOAD
 } bsp_err_t;
+
+extern XPT2046_Touchscreen* touchscreen;
 
 void bsp_init(void);
 bool bsp_display_init(void);

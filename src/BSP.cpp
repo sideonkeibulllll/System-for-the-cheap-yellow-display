@@ -5,9 +5,8 @@
 #include <driver/ledc.h>
 
 static TFT_eSPI tft = TFT_eSPI();
-static SPIClass touchSPI = SPIClass(HSPI);
-static XPT2046_Touchscreen* touchscreen = nullptr;
-static SPIClass sdSPI = SPIClass(VSPI);
+static SPIClass touchSPI(VSPI);
+XPT2046_Touchscreen* touchscreen = nullptr;
 
 static bool displayReady = false;
 static bool touchReady = false;
@@ -19,12 +18,8 @@ static lv_color_t buf[BSP_DISPLAY_WIDTH * 20];
 static lv_disp_drv_t disp_drv;
 static lv_indev_drv_t indev_drv;
 
-static int16_t touchLastX = 0;
-static int16_t touchLastY = 0;
-static bool touchLastPressed = false;
-
-static bool debugTouch = true;
-static unsigned long lastTouchDebug = 0;
+static int16_t lastX = 0;
+static int16_t lastY = 0;
 
 static void initPWM() {
     ledc_timer_config_t timer_conf = {
@@ -49,6 +44,46 @@ static void initPWM() {
     ledc_channel_config(&ledc_conf);
 }
 
+void IRAM_ATTR bsp_display_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p) {
+    uint32_t w = (area->x2 - area->x1 + 1);
+    uint32_t h = (area->y2 - area->y1 + 1);
+    
+    tft.startWrite();
+    tft.setAddrWindow(area->x1, area->y1, w, h);
+    tft.pushColors((uint16_t*)&color_p->full, w * h, true);
+    tft.endWrite();
+    
+    lv_disp_flush_ready(disp);
+}
+
+void bsp_touch_read(lv_indev_drv_t *indev_driver, lv_indev_data_t *data) {
+    if (!touchscreen) {
+        data->state = LV_INDEV_STATE_REL;
+        return;
+    }
+    
+    if (touchscreen->tirqTouched() && touchscreen->touched()) {
+        TS_Point p = touchscreen->getPoint();
+        
+        int16_t x = map(p.x, 200, 3700, 1, BSP_DISPLAY_WIDTH);
+        int16_t y = map(p.y, 240, 3800, 1, BSP_DISPLAY_HEIGHT);
+        
+        x = constrain(x, 0, BSP_DISPLAY_WIDTH - 1);
+        y = constrain(y, 0, BSP_DISPLAY_HEIGHT - 1);
+        
+        lastX = x;
+        lastY = y;
+        
+        data->point.x = x;
+        data->point.y = y;
+        data->state = LV_INDEV_STATE_PR;
+    } else {
+        data->point.x = lastX;
+        data->point.y = lastY;
+        data->state = LV_INDEV_STATE_REL;
+    }
+}
+
 bool bsp_display_init(void) {
     Serial.println("[BSP] Initializing display...");
     
@@ -61,9 +96,6 @@ bool bsp_display_init(void) {
     if (cfg.invertColor) {
         tft.invertDisplay(true);
     }
-    
-    Serial.printf("  Display: %dx%d (landscape), SPI @ %d MHz\n", 
-        BSP_DISPLAY_WIDTH, BSP_DISPLAY_HEIGHT, cfg.spiFrequency / 1000000);
     
     lv_disp_draw_buf_init(&draw_buf, buf, NULL, BSP_DISPLAY_WIDTH * 20);
     
@@ -84,12 +116,13 @@ bool bsp_touch_init(void) {
     
     TouchConfig& cfg = Config.getTouchConfig();
     
-    Serial.printf("  Touch SPI: MOSI=%d, MISO=%d, CLK=%d, CS=%d, IRQ=%d\n",
+    Serial.printf("  Touch pins: MOSI=%d, MISO=%d, CLK=%d, CS=%d, IRQ=%d\n",
         cfg.spiMosi, cfg.spiMiso, cfg.spiClk, cfg.spiCs, cfg.pinIrq);
     
     touchSPI.begin(cfg.spiClk, cfg.spiMiso, cfg.spiMosi, cfg.spiCs);
     
     touchscreen = new XPT2046_Touchscreen(cfg.spiCs, cfg.pinIrq);
+    
     if (!touchscreen->begin(touchSPI)) {
         Serial.println("  Touch init: FAILED");
         return false;
@@ -97,10 +130,13 @@ bool bsp_touch_init(void) {
     
     touchscreen->setRotation(1);
     
-    Serial.println("  Touch init: OK");
-    Serial.println("  Touch the screen to test...");
+    lv_indev_drv_init(&indev_drv);
+    indev_drv.type = LV_INDEV_TYPE_POINTER;
+    indev_drv.read_cb = bsp_touch_read;
+    lv_indev_drv_register(&indev_drv);
     
     touchReady = true;
+    Serial.println("  Touch init: OK");
     return true;
 }
 
@@ -109,6 +145,7 @@ bool bsp_sd_init(void) {
     
     StorageConfig& cfg = Config.getStorageConfig();
     
+    SPIClass sdSPI(VSPI);
     sdSPI.begin(cfg.sdSpiClk, cfg.sdSpiMiso, cfg.sdSpiMosi, cfg.sdSpiCs);
     
     if (!SD.begin(cfg.sdSpiCs, sdSPI)) {
@@ -125,13 +162,7 @@ bool bsp_sd_init(void) {
     }
     
     uint64_t cardSize = SD.cardSize() / (1024 * 1024);
-    Serial.printf("  SD card: %llu MB, Type: ", cardSize);
-    switch (cardType) {
-        case CARD_MMC:  Serial.println("MMC"); break;
-        case CARD_SD:   Serial.println("SD"); break;
-        case CARD_SDHC: Serial.println("SDHC"); break;
-        default:        Serial.println("Unknown"); break;
-    }
+    Serial.printf("  SD card: %llu MB\n", cardSize);
     
     sdReady = true;
     Serial.println("  SD card init: OK");
@@ -153,62 +184,12 @@ void bsp_init(void) {
     
     bsp_display_init();
     bsp_touch_init();
-    bsp_sd_init();
+    // bsp_sd_init();  // Disabled: conflicts with touch SPI (both use VSPI)
     
     bsp_backlight_set(255);
     
     Serial.println("=================================");
     Serial.println("[BSP] Init complete\n");
-}
-
-void IRAM_ATTR bsp_display_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p) {
-    uint32_t w = (area->x2 - area->x1 + 1);
-    uint32_t h = (area->y2 - area->y1 + 1);
-    
-    tft.startWrite();
-    tft.setAddrWindow(area->x1, area->y1, w, h);
-    tft.pushColors((uint16_t*)&color_p->full, w * h, true);
-    tft.endWrite();
-    
-    lv_disp_flush_ready(disp);
-}
-
-void bsp_touch_read(lv_indev_drv_t *indev_driver, lv_indev_data_t *data) {
-    if (!touchscreen) {
-        data->state = LV_INDEV_STATE_REL;
-        return;
-    }
-    
-    bool touched = touchscreen->touched();
-    
-    if (touched) {
-        TS_Point p = touchscreen->getPoint();
-        
-        int16_t x = map(p.x, 200, 3900, 0, BSP_DISPLAY_WIDTH);
-        int16_t y = map(p.y, 200, 3900, 0, BSP_DISPLAY_HEIGHT);
-        
-        x = constrain(x, 0, BSP_DISPLAY_WIDTH - 1);
-        y = constrain(y, 0, BSP_DISPLAY_HEIGHT - 1);
-        
-        touchLastX = x;
-        touchLastY = y;
-        touchLastPressed = true;
-        
-        data->point.x = x;
-        data->point.y = y;
-        data->state = LV_INDEV_STATE_PR;
-        
-        if (debugTouch && (millis() - lastTouchDebug > 500)) {
-            Serial.printf("[Touch] Raw: (%d, %d) -> Mapped: (%d, %d)\n", 
-                p.x, p.y, x, y);
-            lastTouchDebug = millis();
-        }
-    } else {
-        data->point.x = touchLastX;
-        data->point.y = touchLastY;
-        data->state = LV_INDEV_STATE_REL;
-        touchLastPressed = false;
-    }
 }
 
 void bsp_backlight_set(uint8_t level) {

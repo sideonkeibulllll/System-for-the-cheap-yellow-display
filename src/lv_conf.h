@@ -88,8 +88,10 @@
 
 #define LV_USE_LOG 0
 
+#if LV_USE_LOG
 #define LV_LOG_LEVEL LV_LOG_LEVEL_WARN
 #define LV_LOG_PRINTF 0
+#endif
 
 #define LV_USE_ASSERT_NULL 0
 #define LV_USE_ASSERT_MALLOC 0
