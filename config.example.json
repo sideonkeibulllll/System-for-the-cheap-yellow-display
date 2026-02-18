@@ -1,0 +1,45 @@
+{
+    "display": {
+        "width": 240,
+        "height": 320,
+        "colorDepth": 16,
+        "vdbBufferSizeKB": 30,
+        "spiMosi": 13,
+        "spiMiso": 12,
+        "spiClk": 14,
+        "spiCs": 15,
+        "pinDc": 2,
+        "pinRst": -1,
+        "pinBl": 21,
+        "invertColor": false,
+        "backlightMaxLevel": 255,
+        "spiFrequency": 40000000
+    },
+    "touch": {
+        "spiMosi": 32,
+        "spiMiso": 39,
+        "spiClk": 25,
+        "spiCs": 33,
+        "pinIrq": 36,
+        "calibrationMatrix": [1.0, 0.0, 0.0, 0.0, 1.0, 0.0]
+    },
+    "storage": {
+        "sdMountPoint": "S",
+        "sdSpiMosi": 23,
+        "sdSpiMiso": 19,
+        "sdSpiClk": 18,
+        "sdSpiCs": 5
+    },
+    "system": {
+        "defaultTheme": "dark",
+        "defaultFont": "F:/fonts/default_16.bin",
+        "logLevel": "INFO",
+        "idleTimeoutSec": 300,
+        "wifiAutoConnect": false,
+        "btEnabled": false
+    },
+    "wifi": {
+        "ssid": "",
+        "password": ""
+    }
+}
