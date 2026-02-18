@@ -1,20 +1,26 @@
 #include "BSP.h"
 #include "ConfigManager.h"
+#include "Storage.h"
 #include <TFT_eSPI.h>
 #include <XPT2046_Touchscreen.h>
 #include <driver/ledc.h>
+#include <SPIFFS.h>
 
 static TFT_eSPI tft = TFT_eSPI();
-static SPIClass touchSPI(VSPI);
+static SPIClass touchSPI;
 XPT2046_Touchscreen* touchscreen = nullptr;
+static SPIClass sdSPI(VSPI);
 
 static bool displayReady = false;
 static bool touchReady = false;
 static bool sdReady = false;
+static bool spiffsReady = false;
 static uint8_t currentBacklight = 255;
 
+#define VDB_BUFFER_SIZE (BSP_DISPLAY_WIDTH * 20)
+static lv_color_t buf1[VDB_BUFFER_SIZE];
+static lv_color_t buf2[VDB_BUFFER_SIZE];
 static lv_disp_draw_buf_t draw_buf;
-static lv_color_t buf[BSP_DISPLAY_WIDTH * 20];
 static lv_disp_drv_t disp_drv;
 static lv_indev_drv_t indev_drv;
 
@@ -97,7 +103,7 @@ bool bsp_display_init(void) {
         tft.invertDisplay(true);
     }
     
-    lv_disp_draw_buf_init(&draw_buf, buf, NULL, BSP_DISPLAY_WIDTH * 20);
+    lv_disp_draw_buf_init(&draw_buf, buf1, buf2, VDB_BUFFER_SIZE);
     
     lv_disp_drv_init(&disp_drv);
     disp_drv.hor_res = BSP_DISPLAY_WIDTH;
@@ -107,12 +113,14 @@ bool bsp_display_init(void) {
     lv_disp_drv_register(&disp_drv);
     
     displayReady = true;
+    Serial.printf("  VDB buffer: %d pixels (double buffer)\n", VDB_BUFFER_SIZE);
+    Serial.printf("  VDB size: %d bytes per buffer\n", VDB_BUFFER_SIZE * sizeof(lv_color_t));
     Serial.println("  Display init: OK");
     return true;
 }
 
 bool bsp_touch_init(void) {
-    Serial.println("[BSP] Initializing touch...");
+    Serial.println("[BSP] Initializing touch (custom SPI)...");
     
     TouchConfig& cfg = Config.getTouchConfig();
     
@@ -141,11 +149,10 @@ bool bsp_touch_init(void) {
 }
 
 bool bsp_sd_init(void) {
-    Serial.println("[BSP] Initializing SD card...");
+    Serial.println("[BSP] Initializing SD card (hardware VSPI)...");
     
     StorageConfig& cfg = Config.getStorageConfig();
     
-    SPIClass sdSPI(VSPI);
     sdSPI.begin(cfg.sdSpiClk, cfg.sdSpiMiso, cfg.sdSpiMosi, cfg.sdSpiCs);
     
     if (!SD.begin(cfg.sdSpiCs, sdSPI)) {
@@ -169,6 +176,26 @@ bool bsp_sd_init(void) {
     return true;
 }
 
+bool bsp_storage_init(void) {
+    Serial.println("[BSP] Initializing Storage System...");
+    
+    if (Storage.begin()) {
+        spiffsReady = Storage.isSPIFFSReady();
+        sdReady = Storage.isSDReady();
+        Serial.println("  Storage init: OK");
+        return true;
+    }
+    
+    Serial.println("  Storage init: PARTIAL (check individual systems)");
+    spiffsReady = Storage.isSPIFFSReady();
+    sdReady = Storage.isSDReady();
+    return false;
+}
+
+bool bsp_is_spiffs_ready(void) {
+    return spiffsReady;
+}
+
 void bsp_init(void) {
     Serial.println("\n[BSP] Board Support Package Init");
     Serial.println("=================================");
@@ -184,7 +211,7 @@ void bsp_init(void) {
     
     bsp_display_init();
     bsp_touch_init();
-    // bsp_sd_init();  // Disabled: conflicts with touch SPI (both use VSPI)
+    bsp_storage_init();
     
     bsp_backlight_set(255);
     
@@ -240,6 +267,7 @@ void bsp_print_status(void) {
     Serial.printf("  Display:  %s (%dx%d)\n", 
         displayReady ? "READY" : "NOT READY", BSP_DISPLAY_WIDTH, BSP_DISPLAY_HEIGHT);
     Serial.printf("  Touch:    %s\n", touchReady ? "READY" : "NOT READY");
+    Serial.printf("  SPIFFS:   %s\n", spiffsReady ? "READY" : "NOT READY");
     Serial.printf("  SD Card:  %s\n", sdReady ? "READY" : "NOT READY");
     Serial.printf("  Backlight: %d/255\n", currentBacklight);
     Serial.printf("  Free Heap: %u bytes\n", bsp_get_free_heap());

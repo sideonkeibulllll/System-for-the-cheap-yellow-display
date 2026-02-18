@@ -3,3 +3,9 @@
 .vscode/c_cpp_properties.json
 .vscode/launch.json
 .vscode/ipch
+.cache/
+*.txt
+串口最新输出*.txt
+上次编译警告.txt
+示例教程*.md
+partitions.csv

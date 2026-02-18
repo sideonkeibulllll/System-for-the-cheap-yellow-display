@@ -20,9 +20,9 @@
 #define LV_USE_GIF 0
 
 #define LV_USE_SNAPSHOT 0
-#define LV_USE_SYSMON 0
-#define LV_USE_PERF_MONITOR 0
-#define LV_USE_MEM_MONITOR 0
+#define LV_USE_SYSMON 1
+#define LV_USE_PERF_MONITOR 1
+#define LV_USE_MEM_MONITOR 1
 #define LV_USE_REFR_MONITOR 0
 
 #define LV_FONT_MONTSERRAT_8 0
@@ -109,7 +109,7 @@
 
 #define LV_ATTRIBUTE_MEM_ALIGN
 
-#define LV_MEM_SIZE (32 * 1024U)
+#define LV_MEM_SIZE (48 * 1024U)
 #define LV_MEM_ADDR 0
 #define LV_MEM_CUSTOM 0
 #define LV_MEM_CUSTOM_INCLUDE <stdlib.h>
@@ -117,7 +117,7 @@
 #define LV_MEM_CUSTOM_FREE free
 #define LV_MEM_CUSTOM_REALLOC realloc
 
-#define LV_MEMCPY_MEMSET_STD 0
+#define LV_MEMCPY_MEMSET_STD 1
 
 #define LV_TICK_CUSTOM 1
 #if LV_TICK_CUSTOM == 1
@@ -125,11 +125,11 @@
     #define LV_TICK_CUSTOM_SYS_TIME_EXPR (millis())
 #endif
 
-#define LV_DEF_REFR_PERIOD 33
+#define LV_DEF_REFR_PERIOD 16
 
-#define LV_INDEV_DEF_READ_PERIOD 30
+#define LV_INDEV_DEF_READ_PERIOD 10
 
-#define LV_DISP_DEF_REFR_PERIOD 30
+#define LV_DISP_DEF_REFR_PERIOD 16
 
 #define LV_USE_PERF_MONITOR_POS LV_ALIGN_BOTTOM_RIGHT
 
@@ -137,5 +137,7 @@
 
 #define LV_DRAW_SW_STRIDE_ALIGN 0
 #define LV_DRAW_SW_BUF_ALIGN 4
+
+#define LV_ATTRIBUTE_FAST_MEM
 
 #endif

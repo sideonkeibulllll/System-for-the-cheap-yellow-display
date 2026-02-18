@@ -30,7 +30,8 @@ typedef enum {
     BSP_ERR_DISPLAY_INIT,
     BSP_ERR_TOUCH_INIT,
     BSP_ERR_SD_INIT,
-    BSP_ERR_CONFIG_LOAD
+    BSP_ERR_CONFIG_LOAD,
+    BSP_ERR_STORAGE_INIT
 } bsp_err_t;
 
 extern XPT2046_Touchscreen* touchscreen;
@@ -39,6 +40,7 @@ void bsp_init(void);
 bool bsp_display_init(void);
 bool bsp_touch_init(void);
 bool bsp_sd_init(void);
+bool bsp_storage_init(void);
 
 void bsp_backlight_set(uint8_t level);
 uint8_t bsp_backlight_get(void);
@@ -53,6 +55,7 @@ uint32_t bsp_get_free_heap(void);
 bool bsp_is_display_ready(void);
 bool bsp_is_touch_ready(void);
 bool bsp_is_sd_ready(void);
+bool bsp_is_spiffs_ready(void);
 
 void bsp_display_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p);
 void bsp_touch_read(lv_indev_drv_t *indev_driver, lv_indev_data_t *data);
