@@ -1,6 +1,7 @@
 #include "BSP.h"
 #include "ConfigManager.h"
 #include "Storage.h"
+#include "PowerManager.h"
 #include <TFT_eSPI.h>
 #include <XPT2046_Touchscreen.h>
 #include <driver/ledc.h>
@@ -83,6 +84,8 @@ void bsp_touch_read(lv_indev_drv_t *indev_driver, lv_indev_data_t *data) {
         data->point.x = x;
         data->point.y = y;
         data->state = LV_INDEV_STATE_PR;
+        
+        Power.resetIdleTimer();
     } else {
         data->point.x = lastX;
         data->point.y = lastY;
