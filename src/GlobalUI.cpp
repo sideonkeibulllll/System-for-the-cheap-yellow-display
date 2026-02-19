@@ -6,15 +6,90 @@ lv_obj_t *GlobalUI::sidebar = nullptr;
 lv_obj_t *GlobalUI::toggleBtn = nullptr;
 bool GlobalUI::sidebarOpen = false;
 
+// Performance monitor control
+#if LV_USE_PERF_MONITOR || LV_USE_MEM_MONITOR
+#include <lvgl.h>
+
+// Find performance monitor label by searching all objects on lv_layer_sys()
+static lv_obj_t* find_perf_monitor_label() {
+    lv_obj_t* layer = lv_layer_sys();
+    lv_obj_t* child = lv_obj_get_child(layer, 0);
+    while (child) {
+        // Check if this is the performance monitor label
+        if (lv_obj_get_class(child) == &lv_label_class) {
+            // Check for performance monitor style
+            lv_color_t bg_color = lv_obj_get_style_bg_color(child, 0);
+            if (LV_COLOR_GET_R(bg_color) == 0 && LV_COLOR_GET_G(bg_color) == 0 && LV_COLOR_GET_B(bg_color) == 0) {
+                lv_opa_t bg_opa = lv_obj_get_style_bg_opa(child, 0);
+                if (bg_opa == LV_OPA_50) {
+                    return child;
+                }
+            }
+        }
+        child = lv_obj_get_child(layer, lv_obj_get_child_id(child) + 1);
+    }
+    return NULL;
+}
+
+// Find memory monitor label by searching all objects on lv_layer_sys()
+static lv_obj_t* find_memory_monitor_label() {
+    lv_obj_t* layer = lv_layer_sys();
+    lv_obj_t* child = lv_obj_get_child(layer, 0);
+    while (child) {
+        // Check if this is the memory monitor label
+        if (lv_obj_get_class(child) == &lv_label_class) {
+            // Check for memory monitor style (same as performance monitor)
+            lv_color_t bg_color = lv_obj_get_style_bg_color(child, 0);
+            if (LV_COLOR_GET_R(bg_color) == 0 && LV_COLOR_GET_G(bg_color) == 0 && LV_COLOR_GET_B(bg_color) == 0) {
+                lv_opa_t bg_opa = lv_obj_get_style_bg_opa(child, 0);
+                if (bg_opa == LV_OPA_50) {
+                    // Memory monitor is typically positioned at bottom-left
+                    lv_align_t align = lv_obj_get_style_align(child, 0);
+                    if (align == LV_ALIGN_BOTTOM_LEFT) {
+                        return child;
+                    }
+                }
+            }
+        }
+        child = lv_obj_get_child(layer, lv_obj_get_child_id(child) + 1);
+    }
+    return NULL;
+}
+#endif
+
 void toggle_sidebar(lv_event_t *e) {
     lv_event_code_t code = lv_event_get_code(e);
     if (code == LV_EVENT_CLICKED) {
         if (GlobalUI::sidebarOpen) {
             lv_obj_set_pos(GlobalUI::sidebar, -50, 20);
             lv_label_set_text(lv_obj_get_child(GlobalUI::toggleBtn, 0), LV_SYMBOL_RIGHT);
+            #if LV_USE_PERF_MONITOR
+            lv_obj_t* perf_label = find_perf_monitor_label();
+            if (perf_label) {
+                lv_obj_add_flag(perf_label, LV_OBJ_FLAG_HIDDEN);
+            }
+            #endif
+            #if LV_USE_MEM_MONITOR
+            lv_obj_t* mem_label = find_memory_monitor_label();
+            if (mem_label) {
+                lv_obj_add_flag(mem_label, LV_OBJ_FLAG_HIDDEN);
+            }
+            #endif
         } else {
             lv_obj_set_pos(GlobalUI::sidebar, 0, 20);
             lv_label_set_text(lv_obj_get_child(GlobalUI::toggleBtn, 0), LV_SYMBOL_LEFT);
+            #if LV_USE_PERF_MONITOR
+            lv_obj_t* perf_label = find_perf_monitor_label();
+            if (perf_label) {
+                lv_obj_clear_flag(perf_label, LV_OBJ_FLAG_HIDDEN);
+            }
+            #endif
+            #if LV_USE_MEM_MONITOR
+            lv_obj_t* mem_label = find_memory_monitor_label();
+            if (mem_label) {
+                lv_obj_clear_flag(mem_label, LV_OBJ_FLAG_HIDDEN);
+            }
+            #endif
         }
         GlobalUI::sidebarOpen = !GlobalUI::sidebarOpen;
     }
@@ -52,6 +127,29 @@ void GlobalUI::init() {
         lv_obj_set_style_shadow_ofs_x(sidebar, 2, 0);
         lv_obj_set_style_shadow_ofs_y(sidebar, 0, 0);
         lv_obj_set_style_shadow_opa(sidebar, 100, 0);
+        // Initialize performance monitor visibility
+        #if LV_USE_PERF_MONITOR
+        lv_obj_t* perf_label = find_perf_monitor_label();
+        if (perf_label) {
+            if (sidebarOpen) {
+                lv_obj_clear_flag(perf_label, LV_OBJ_FLAG_HIDDEN);
+            } else {
+                lv_obj_add_flag(perf_label, LV_OBJ_FLAG_HIDDEN);
+            }
+        }
+        #endif
+        
+        // Initialize memory monitor visibility
+        #if LV_USE_MEM_MONITOR
+        lv_obj_t* mem_label = find_memory_monitor_label();
+        if (mem_label) {
+            if (sidebarOpen) {
+                lv_obj_clear_flag(mem_label, LV_OBJ_FLAG_HIDDEN);
+            } else {
+                lv_obj_add_flag(mem_label, LV_OBJ_FLAG_HIDDEN);
+            }
+        }
+        #endif
     } else {
         // Update sidebar position
         lv_obj_set_pos(sidebar, sidebarOpen ? 0 : -50, 20);
