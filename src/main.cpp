@@ -11,6 +11,7 @@
 #include "AppManager.h"
 #include "SettingsApp.h"
 #include "DemoApp.h"
+#include "GlobalUI.h"
 
 static TaskHandle_t appTaskHandle = nullptr;
 
@@ -173,6 +174,8 @@ void setup() {
     createHomeUI();
     
     lv_scr_load(AppMgr.getHomeScreen());
+    
+    GlobalUI::getInstance().init();
     
     Perf.startLvglTask();
     

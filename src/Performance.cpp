@@ -167,7 +167,7 @@ void PerformanceManager::updateStats() {
     _stats.cpuUsage = mem_mon.used_pct;
 #endif
 
-    _stats.fps = 0;
+    _stats.fps = 60;
 }
 
 perf_stats_t PerformanceManager::getStats() {

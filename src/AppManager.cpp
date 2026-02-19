@@ -2,6 +2,9 @@
 #include "BSP.h"
 #include "Storage.h"
 #include "PowerManager.h"
+#include "GlobalUI.h"
+#include <lvgl.h>
+#include <Arduino.h>
 #include <cstring>
 
 AppManager AppMgr;
@@ -79,6 +82,7 @@ bool BaseApp::onResume() {
     
     if (_screen) {
         lv_scr_load(_screen);
+        GlobalUI::getInstance().init();
     }
     
     Serial.printf("[App] %s resumed\n", _name);
@@ -257,6 +261,7 @@ bool AppManager::switchToHome() {
     
     if (_homeScreen) {
         lv_scr_load(_homeScreen);
+        GlobalUI::getInstance().init();
     }
     
     if (_activeApp) {
