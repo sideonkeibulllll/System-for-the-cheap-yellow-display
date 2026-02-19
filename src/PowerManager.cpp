@@ -104,7 +104,8 @@ void PowerManager::handleBootButton() {
         bootButtonPressed = false;
         
         uint32_t now = millis();
-        if (now - _bootButtonDebounceMs < 200) {
+        if (now - _bootButtonDebounceMs < 500) {
+            Serial.println("[Power] BOOT button: Debounce ignored (0.5s)");
             return;
         }
         _bootButtonDebounceMs = now;
@@ -192,12 +193,18 @@ void PowerManager::setAutoBacklightParams(uint8_t minLevel, uint8_t maxLevel) {
 }
 
 void PowerManager::updateBacklightAuto() {
+    if (_status.idleTimeMs < POWER_IDLE_TIMEOUT_MS) {
+        Serial.println("[Power] Auto mode: 0-30s - Keeping current brightness level");
+        return;
+    }
+    
     _status.ldrValue = analogRead(POWER_LDR_PIN);
     
     uint8_t newLevel = calculateBacklightFromLDR(_status.ldrValue);
     
     if (newLevel != _status.backlightLevel) {
         setBacklight(newLevel);
+        Serial.printf("[Power] Auto mode: Adjusting brightness to %d (LDR: %d)\n", newLevel, _status.ldrValue);
     }
 }
 
@@ -251,14 +258,21 @@ void PowerManager::updateIdleState() {
         if (_status.state != POWER_STATE_SLEEP) {
             enterSleep();
         }
+    } else if (idleMs >= POWER_SLEEP_DELAY_MS) {
+        if (_status.backlightMode == BACKLIGHT_MODE_OFF) {
+            enterSleep();
+        }
+    } else if (idleMs >= POWER_CPU_DOWN_TIMEOUT_MS) {
+        if (_status.backlightMode == BACKLIGHT_MODE_OFF && _status.cpuMode != POWER_MODE_BALANCED) {
+            setCpuMode(POWER_MODE_BALANCED);
+            Serial.println("[Power] Backlight OFF for 30s: CPU mode set to 160MHz");
+        }
     } else if (idleMs >= POWER_IDLE_TIMEOUT_MS) {
         if (_status.state == POWER_STATE_ACTIVE) {
             _status.state = POWER_STATE_IDLE;
             
             if (_status.backlightMode == BACKLIGHT_MODE_AUTO) {
-                uint8_t dimLevel = (_autoMinLevel + POWER_BACKLIGHT_DIM) / 2;
-                bsp_backlight_set(dimLevel);
-                _status.backlightLevel = dimLevel;
+                Serial.println("[Power] Auto mode: Keeping current brightness level");
             }
             
             Serial.println("[Power] Entering IDLE state");
@@ -272,7 +286,7 @@ void PowerManager::updateIdleState() {
             _status.state = POWER_STATE_ACTIVE;
             
             if (_status.backlightMode == BACKLIGHT_MODE_AUTO) {
-                updateBacklightAuto();
+                Serial.println("[Power] Auto mode: Resuming normal operation");
             }
             
             Serial.println("[Power] Returning to ACTIVE state");
@@ -300,8 +314,6 @@ void PowerManager::enterSleep() {
     
     esp_sleep_enable_ext0_wakeup((gpio_num_t)POWER_BOOT_PIN, LOW);
     
-    esp_sleep_enable_timer_wakeup(60 * 1000000);
-    
     esp_light_sleep_start();
     
     exitSleep();
@@ -313,6 +325,8 @@ void PowerManager::exitSleep() {
     _status.state = POWER_STATE_ACTIVE;
     _status.lastActivityMs = millis();
     
+    setCpuMode(POWER_MODE_HIGH);
+    
     if (_status.backlightMode == BACKLIGHT_MODE_AUTO) {
         updateBacklightAuto();
     } else if (_status.backlightMode == BACKLIGHT_MODE_MANUAL) {
@@ -323,7 +337,7 @@ void PowerManager::exitSleep() {
         bsp_backlight_set(POWER_BACKLIGHT_MAX);
     }
     
-    Serial.println("[Power] Wakeup complete - ACTIVE state");
+    Serial.println("[Power] Wakeup complete - ACTIVE state (CPU: 240MHz)");
     
     if (_stateCallback) {
         _stateCallback(POWER_STATE_ACTIVE);

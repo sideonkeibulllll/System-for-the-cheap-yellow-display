@@ -10,10 +10,10 @@ void toggle_sidebar(lv_event_t *e) {
     lv_event_code_t code = lv_event_get_code(e);
     if (code == LV_EVENT_CLICKED) {
         if (GlobalUI::sidebarOpen) {
-            lv_obj_set_pos(GlobalUI::sidebar, -50, 0);
+            lv_obj_set_pos(GlobalUI::sidebar, -50, 20);
             lv_label_set_text(lv_obj_get_child(GlobalUI::toggleBtn, 0), LV_SYMBOL_RIGHT);
         } else {
-            lv_obj_set_pos(GlobalUI::sidebar, 0, 0);
+            lv_obj_set_pos(GlobalUI::sidebar, 0, 20);
             lv_label_set_text(lv_obj_get_child(GlobalUI::toggleBtn, 0), LV_SYMBOL_LEFT);
         }
         GlobalUI::sidebarOpen = !GlobalUI::sidebarOpen;
