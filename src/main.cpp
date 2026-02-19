@@ -41,11 +41,7 @@ static void createHomeUI() {
     lv_obj_t* home = AppMgr.getHomeScreen();
     if (!home) return;
     
-    lv_obj_t* title = lv_label_create(home);
-    lv_label_set_text(title, "ESP32 App Launcher");
-    lv_obj_set_style_text_color(title, lv_color_make(0x00, 0xFF, 0x00), 0);
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
-    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 5);
+
     
     lv_obj_t* container = lv_obj_create(home);
     lv_obj_set_size(container, BSP_DISPLAY_WIDTH - 20, 120);
@@ -86,17 +82,9 @@ static void createHomeUI() {
         lv_obj_align(nameLabel, LV_ALIGN_BOTTOM_MID, 0, -2);
     }
     
-    labelHomeStatus = lv_label_create(home);
-    lv_label_set_text(labelHomeStatus, "Stage 7: App Manager Ready");
-    lv_obj_set_style_text_color(labelHomeStatus, lv_color_make(0xFF, 0xFF, 0x00), 0);
-    lv_obj_set_style_text_font(labelHomeStatus, &lv_font_montserrat_12, 0);
-    lv_obj_align(labelHomeStatus, LV_ALIGN_BOTTOM_MID, 0, -50);
+
     
-    labelHomePerf = lv_label_create(home);
-    lv_label_set_text(labelHomePerf, "FPS: -- | Heap: -- KB");
-    lv_obj_set_style_text_color(labelHomePerf, lv_color_make(0xAA, 0xAA, 0xAA), 0);
-    lv_obj_set_style_text_font(labelHomePerf, &lv_font_montserrat_12, 0);
-    lv_obj_align(labelHomePerf, LV_ALIGN_BOTTOM_MID, 0, -30);
+
     
     lv_obj_t* hint = lv_label_create(home);
     lv_label_set_text(hint, "Tap icon to launch app");
