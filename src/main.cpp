@@ -1,76 +1,211 @@
 #include <Arduino.h>
 #include <lvgl.h>
 #include <SPI.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include "ConfigManager.h"
 #include "BSP.h"
+#include "Storage.h"
 #include "Performance.h"
+#include "PowerManager.h"
+#include "AppManager.h"
+#include "SettingsApp.h"
+#include "DemoApp.h"
 
-static lv_obj_t* labelStatus;
-static lv_obj_t* labelPerf;
-static lv_timer_t* updateTimer = nullptr;
+static TaskHandle_t appTaskHandle = nullptr;
 
-static void update_cb(lv_timer_t* timer) {
-    if (labelPerf && lv_obj_is_valid(labelPerf)) {
+static lv_obj_t* labelHomeStatus;
+static lv_obj_t* labelHomePerf;
+static lv_timer_t* homeUpdateTimer = nullptr;
+
+static void home_update_cb(lv_timer_t* timer) {
+    if (labelHomePerf && lv_obj_is_valid(labelHomePerf)) {
         perf_stats_t stats = Perf.getStats();
-        lv_label_set_text_fmt(labelPerf, 
-            "FPS: %u | Heap: %u KB",
+        lv_label_set_text_fmt(labelHomePerf, 
+            "FPS: %u | Heap: %u KB | LVGL: %u KB",
             stats.fps,
-            stats.freeHeap / 1024
+            stats.freeHeap / 1024,
+            stats.lvglMemUsed / 1024
         );
     }
 }
 
-static void createUI() {
-    lv_obj_t* scr = lv_scr_act();
+static void app_btn_cb(lv_event_t* e) {
+    const char* appName = (const char*)lv_event_get_user_data(e);
+    Serial.printf("[Home] Launching app: %s\n", appName);
+    AppMgr.switchToApp(appName);
+    bsp_rgb_led_set(rand() % 256, rand() % 256, rand() % 256);
+}
+
+static void createHomeUI() {
+    lv_obj_t* home = AppMgr.getHomeScreen();
+    if (!home) return;
     
-    lv_obj_t* title = lv_label_create(scr);
-    lv_label_set_text(title, "ESP32-2432S028R");
+    lv_obj_t* title = lv_label_create(home);
+    lv_label_set_text(title, "ESP32 App Launcher");
     lv_obj_set_style_text_color(title, lv_color_make(0x00, 0xFF, 0x00), 0);
     lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
-    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 20);
+    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 5);
     
-    lv_obj_t* subtitle = lv_label_create(scr);
-    lv_label_set_text(subtitle, "Minimal System Ready");
-    lv_obj_set_style_text_color(subtitle, lv_color_make(0xFF, 0xFF, 0x00), 0);
-    lv_obj_align(subtitle, LV_ALIGN_TOP_MID, 0, 50);
+    lv_obj_t* container = lv_obj_create(home);
+    lv_obj_set_size(container, BSP_DISPLAY_WIDTH - 20, 120);
+    lv_obj_set_style_bg_color(container, lv_color_make(0x20, 0x20, 0x20), 0);
+    lv_obj_set_style_border_width(container, 0, 0);
+    lv_obj_align(container, LV_ALIGN_TOP_MID, 0, 35);
+    lv_obj_set_flex_flow(container, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_flex_align(container, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START);
+    lv_obj_set_style_pad_row(container, 10, 0);
+    lv_obj_set_style_pad_column(container, 10, 0);
     
-    labelStatus = lv_label_create(scr);
-    lv_label_set_text(labelStatus, "System: OK");
-    lv_obj_set_style_text_color(labelStatus, lv_color_make(0x00, 0xCC, 0x00), 0);
-    lv_obj_align(labelStatus, LV_ALIGN_CENTER, 0, -20);
+    int appCount = AppMgr.getAppCount();
+    for (int i = 0; i < appCount; i++) {
+        app_info_t info = AppMgr.getAppInfo(i);
+        if (!info.enabled) continue;
+        
+        const char* appName = AppMgr.getAppName(i);
+        
+        lv_obj_t* appBtn = lv_btn_create(container);
+        lv_obj_set_size(appBtn, 90, 50);
+        lv_obj_add_event_cb(appBtn, app_btn_cb, LV_EVENT_CLICKED, (void*)appName);
+        
+        if (info.type == APP_TYPE_SYSTEM) {
+            lv_obj_set_style_bg_color(appBtn, lv_color_make(0x00, 0x60, 0x80), 0);
+        } else {
+            lv_obj_set_style_bg_color(appBtn, lv_color_make(0x60, 0x40, 0x80), 0);
+        }
+        
+        lv_obj_t* btnLabel = lv_label_create(appBtn);
+        lv_label_set_text(btnLabel, info.icon);
+        lv_obj_set_style_text_font(btnLabel, &lv_font_montserrat_20, 0);
+        lv_obj_center(btnLabel);
+        
+        lv_obj_t* nameLabel = lv_label_create(appBtn);
+        lv_label_set_text(nameLabel, info.name);
+        lv_obj_set_style_text_font(nameLabel, &lv_font_montserrat_10, 0);
+        lv_obj_set_style_text_color(nameLabel, lv_color_white(), 0);
+        lv_obj_align(nameLabel, LV_ALIGN_BOTTOM_MID, 0, -2);
+    }
     
-    labelPerf = lv_label_create(scr);
-    lv_label_set_text(labelPerf, "FPS: -- | Heap: -- KB");
-    lv_obj_set_style_text_color(labelPerf, lv_color_make(0xDD, 0xDD, 0xDD), 0);
-    lv_obj_align(labelPerf, LV_ALIGN_CENTER, 0, 20);
+    labelHomeStatus = lv_label_create(home);
+    lv_label_set_text(labelHomeStatus, "Stage 7: App Manager Ready");
+    lv_obj_set_style_text_color(labelHomeStatus, lv_color_make(0xFF, 0xFF, 0x00), 0);
+    lv_obj_set_style_text_font(labelHomeStatus, &lv_font_montserrat_12, 0);
+    lv_obj_align(labelHomeStatus, LV_ALIGN_BOTTOM_MID, 0, -50);
     
-    lv_obj_t* hint = lv_label_create(scr);
-    lv_label_set_text(hint, "High Performance Mode");
-    lv_obj_set_style_text_color(hint, lv_color_make(0x99, 0x99, 0x99), 0);
-    lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -20);
+    labelHomePerf = lv_label_create(home);
+    lv_label_set_text(labelHomePerf, "FPS: -- | Heap: -- KB");
+    lv_obj_set_style_text_color(labelHomePerf, lv_color_make(0xAA, 0xAA, 0xAA), 0);
+    lv_obj_set_style_text_font(labelHomePerf, &lv_font_montserrat_12, 0);
+    lv_obj_align(labelHomePerf, LV_ALIGN_BOTTOM_MID, 0, -30);
     
-    updateTimer = lv_timer_create(update_cb, 500, NULL);
+    lv_obj_t* hint = lv_label_create(home);
+    lv_label_set_text(hint, "Tap icon to launch app");
+    lv_obj_set_style_text_color(hint, lv_color_make(0x60, 0x60, 0x60), 0);
+    lv_obj_set_style_text_font(hint, &lv_font_montserrat_10, 0);
+    lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -10);
+    
+    homeUpdateTimer = lv_timer_create(home_update_cb, 500, NULL);
+}
+
+static void power_state_callback(power_state_t newState) {
+    const char* stateStr = newState == POWER_STATE_ACTIVE ? "Active" :
+                           newState == POWER_STATE_IDLE ? "Idle" : "Sleep";
+    Serial.printf("[App] Power state: %s\n", stateStr);
+}
+
+static void backlight_mode_callback(backlight_mode_t newMode) {
+    const char* modeStr = newMode == BACKLIGHT_MODE_MANUAL ? "Manual" :
+                          newMode == BACKLIGHT_MODE_AUTO ? "Auto" : "Off";
+    Serial.printf("[App] Backlight mode: %s\n", modeStr);
+}
+
+static void appTaskEntry(void* arg) {
+    Serial.println("[App] Application task running on Core 0");
+    
+    while (true) {
+        Power.update();
+        AppMgr.update();
+        
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
 }
 
 void setup() {
     Serial.begin(115200);
-    delay(500);
+    delay(1000);
     
     Serial.println("\n========================================");
-    Serial.println("  ESP32-2432S028R (CYD) - Minimal");
+    Serial.println("  ESP32-2432S028R (CYD) v3 - Stage 7");
+    Serial.println("  App Manager & Multi-App System");
     Serial.println("========================================\n");
     
+    Serial.printf("Initial CPU Freq: %d MHz\n", getCpuFrequencyMhz());
+    Serial.printf("Running on Core: %d\n", xPortGetCoreID());
+    
+    Config.begin();
     lv_init();
+    
     Perf.begin();
+    
     bsp_init();
     
+    Power.begin();
+    Power.setStateCallback(power_state_callback);
+    Power.setBacklightModeCallback(backlight_mode_callback);
+    
+    AppMgr.begin();
+    
+    app_info_t settingsInfo;
+    strncpy(settingsInfo.name, "Settings", APP_NAME_MAX_LEN - 1);
+    strcpy(settingsInfo.icon, LV_SYMBOL_SETTINGS);
+    settingsInfo.type = APP_TYPE_SYSTEM;
+    settingsInfo.enabled = true;
+    AppMgr.registerApp("Settings", createSettingsApp, &settingsInfo);
+    
+    app_info_t demoInfo;
+    strncpy(demoInfo.name, "Demo", APP_NAME_MAX_LEN - 1);
+    strcpy(demoInfo.icon, LV_SYMBOL_PLAY);
+    demoInfo.type = APP_TYPE_USER;
+    demoInfo.enabled = true;
+    AppMgr.registerApp("Demo", createDemoApp, &demoInfo);
+    
+    bsp_rgb_led_set(255, 0, 0);
+    delay(200);
     bsp_rgb_led_set(0, 255, 0);
+    delay(200);
+    bsp_rgb_led_set(0, 0, 255);
     delay(200);
     bsp_rgb_led_off();
     
-    createUI();
+    bsp_print_status();
+    Storage.printStatus();
+    Power.printStatus();
+    AppMgr.printStatus();
+    
+    createHomeUI();
+    
+    lv_scr_load(AppMgr.getHomeScreen());
+    
     Perf.startLvglTask();
     
-    Serial.println("System Ready");
+    xTaskCreatePinnedToCore(
+        appTaskEntry,
+        "AppTask",
+        4096,
+        NULL,
+        3,
+        &appTaskHandle,
+        0
+    );
+    
+    Serial.println("\n========================================");
+    Serial.println("  Stage 7: App Manager READY");
+    Serial.println("========================================");
+    Serial.println("  Home Screen: App Launcher");
+    Serial.println("  Settings: Brightness, Power config");
+    Serial.println("  Demo: Counter app demo");
+    Serial.println("  BOOT Button: Cycle backlight mode");
+    Serial.println("  Touch: App navigation\n");
 }
 
 void loop() {
