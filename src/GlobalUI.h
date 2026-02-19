@@ -1,8 +1,7 @@
-#ifndef GLOBAL_UI_H
-#define GLOBAL_UI_H
+#ifndef GLOBALUI_H
+#define GLOBALUI_H
 
 #include <lvgl.h>
-#include "Performance.h"
 
 class GlobalUI {
 private:
