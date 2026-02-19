@@ -11,6 +11,7 @@
 #include "AppManager.h"
 #include "SettingsApp.h"
 #include "DemoApp.h"
+#include "WiFiConfigApp.h"
 #include "GlobalUI.h"
 
 static TaskHandle_t appTaskHandle = nullptr;
@@ -157,6 +158,13 @@ void setup() {
     demoInfo.type = APP_TYPE_USER;
     demoInfo.enabled = true;
     AppMgr.registerApp("Demo", createDemoApp, &demoInfo);
+    
+    app_info_t wifiInfo;
+    strncpy(wifiInfo.name, "WiFi", APP_NAME_MAX_LEN - 1);
+    strcpy(wifiInfo.icon, LV_SYMBOL_WIFI);
+    wifiInfo.type = APP_TYPE_SYSTEM;
+    wifiInfo.enabled = true;
+    AppMgr.registerApp("WiFiConfig", createWiFiConfigApp, &wifiInfo);
     
     bsp_rgb_led_set(255, 0, 0);
     delay(200);

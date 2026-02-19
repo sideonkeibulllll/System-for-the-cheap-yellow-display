@@ -8,6 +8,7 @@ SettingsApp::SettingsApp() : BaseApp("Settings") {
     labelCPUMode = nullptr;
     labelPowerStatus = nullptr;
     btnBack = nullptr;
+    btnWiFiConfig = nullptr;
     _savedBrightness = 200;
     _savedBacklightMode = BACKLIGHT_MODE_MANUAL;
     _sliderDragging = false;
@@ -83,6 +84,18 @@ bool SettingsApp::createUI() {
     lv_obj_set_style_text_font(labelPowerStatus, &lv_font_montserrat_12, 0);
     lv_obj_align(labelPowerStatus, LV_ALIGN_TOP_LEFT, 10, 155);
     
+    btnWiFiConfig = lv_btn_create(scr);
+    lv_obj_set_size(btnWiFiConfig, 140, 35);
+    lv_obj_align(btnWiFiConfig, LV_ALIGN_TOP_RIGHT, -10, 130);
+    lv_obj_add_event_cb(btnWiFiConfig, wifi_config_btn_cb, LV_EVENT_CLICKED, this);
+    lv_obj_set_style_bg_color(btnWiFiConfig, lv_color_make(0x00, 0x60, 0x80), 0);
+    
+    lv_obj_t* btnWiFiLabel = lv_label_create(btnWiFiConfig);
+    lv_label_set_text(btnWiFiLabel, LV_SYMBOL_WIFI " WiFi Config");
+    lv_obj_set_style_text_font(btnWiFiLabel, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_color(btnWiFiLabel, lv_color_white(), 0);
+    lv_obj_center(btnWiFiLabel);
+    
     btnBack = lv_btn_create(scr);
     lv_obj_set_size(btnBack, 80, 35);
     lv_obj_align(btnBack, LV_ALIGN_BOTTOM_LEFT, 10, -10);
@@ -133,6 +146,10 @@ void SettingsApp::backlight_mode_cb(lv_event_t* e) {
 
 void SettingsApp::back_btn_cb(lv_event_t* e) {
     AppMgr.switchToHome();
+}
+
+void SettingsApp::wifi_config_btn_cb(lv_event_t* e) {
+    AppMgr.switchToApp("WiFiConfig");
 }
 
 void SettingsApp::onUpdate() {

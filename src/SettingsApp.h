@@ -13,6 +13,7 @@ private:
     lv_obj_t* labelCPUMode;
     lv_obj_t* labelPowerStatus;
     lv_obj_t* btnBack;
+    lv_obj_t* btnWiFiConfig;
     
     uint8_t _savedBrightness;
     backlight_mode_t _savedBacklightMode;
@@ -27,6 +28,7 @@ private:
     static void brightness_slider_cb(lv_event_t* e);
     static void backlight_mode_cb(lv_event_t* e);
     static void back_btn_cb(lv_event_t* e);
+    static void wifi_config_btn_cb(lv_event_t* e);
     
 protected:
     virtual bool createUI() override;
