@@ -12,6 +12,7 @@
 #include "SettingsApp.h"
 #include "DemoApp.h"
 #include "WiFiConfigApp.h"
+#include "ChatApp.h"
 #include "GlobalUI.h"
 
 static TaskHandle_t appTaskHandle = nullptr;
@@ -165,6 +166,13 @@ void setup() {
     wifiInfo.type = APP_TYPE_SYSTEM;
     wifiInfo.enabled = true;
     AppMgr.registerApp("WiFiConfig", createWiFiConfigApp, &wifiInfo);
+    
+    app_info_t chatInfo;
+    strncpy(chatInfo.name, "Chat", APP_NAME_MAX_LEN - 1);
+    strcpy(chatInfo.icon, LV_SYMBOL_EDIT);
+    chatInfo.type = APP_TYPE_USER;
+    chatInfo.enabled = true;
+    AppMgr.registerApp("Chat", createChatApp, &chatInfo);
     
     bsp_rgb_led_set(255, 0, 0);
     delay(200);
