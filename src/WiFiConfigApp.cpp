@@ -192,12 +192,14 @@ void WiFiConfigApp::keyboard_event_cb(lv_event_t* e) {
 }
 
 void WiFiConfigApp::startScan() {
+    if (_mode != WIFI_MODE_IDLE) return;
+    
     updateStatus("Scanning...");
     clearNetworkList();
     _mode = WIFI_MODE_SCANNING;
     
     WiFi.mode(WIFI_STA);
-    WiFi.scanNetworks(true);
+    WiFi.scanNetworks(false, true, false, 0, 0);
 }
 
 void WiFiConfigApp::handleScanComplete() {
@@ -212,19 +214,59 @@ void WiFiConfigApp::handleScanComplete() {
         _mode = WIFI_MODE_IDLE;
         return;
     }
-    
-    _scanCount = min((int)result, WIFI_MAX_SCAN_RESULTS);
-    
-    for (int i = 0; i < _scanCount; i++) {
-        strncpy(_scanResults[i].ssid, WiFi.SSID(i).c_str(), WIFI_MAX_SSID_LEN - 1);
-        _scanResults[i].ssid[WIFI_MAX_SSID_LEN - 1] = '\0';
-        _scanResults[i].rssi = WiFi.RSSI(i);
-        _scanResults[i].encryption = WiFi.encryptionType(i);
-        _scanResults[i].isOpen = (_scanResults[i].encryption == WIFI_AUTH_OPEN);
+
+    // Temporary array to hold unique results with strongest RSSI
+    wifi_scan_result_t tempResults[WIFI_MAX_SCAN_RESULTS];
+    int tempCount = 0;
+
+    for (int i = 0; i < result; i++) {
+        String currentSSID = WiFi.SSID(i);
+        bool found = false;
+
+        // Check if SSID already exists in temporary results
+        for (int j = 0; j < tempCount; j++) {
+            if (strcmp(tempResults[j].ssid, currentSSID.c_str()) == 0) {
+                found = true;
+                // Update entry if current has stronger signal
+                if (WiFi.RSSI(i) > tempResults[j].rssi) {
+                    tempResults[j].rssi = WiFi.RSSI(i);
+                    tempResults[j].encryption = WiFi.encryptionType(i);
+                    tempResults[j].isOpen = (tempResults[j].encryption == WIFI_AUTH_OPEN);
+                }
+                break;
+            }
+        }
+
+        // Add new unique SSID to temporary results
+        if (!found && tempCount < WIFI_MAX_SCAN_RESULTS) {
+            strncpy(tempResults[tempCount].ssid, currentSSID.c_str(), WIFI_MAX_SSID_LEN -1);
+            tempResults[tempCount].ssid[WIFI_MAX_SSID_LEN -1] = '\0';
+            tempResults[tempCount].rssi = WiFi.RSSI(i);
+            tempResults[tempCount].encryption = WiFi.encryptionType(i);
+            tempResults[tempCount].isOpen = (tempResults[tempCount].encryption == WIFI_AUTH_OPEN);
+            tempCount++;
+        }
+    }
+
+    // Sort temporary results by RSSI descending (strongest first)
+    for (int i = 0; i < tempCount -1; i++) {
+        for (int j = i+1; j < tempCount; j++) {
+            if (tempResults[j].rssi > tempResults[i].rssi) {
+                wifi_scan_result_t swap = tempResults[i];
+                tempResults[i] = tempResults[j];
+                tempResults[j] = swap;
+            }
+        }
+    }
+
+    // Copy sorted unique results to main scan results array
+    _scanCount = min(tempCount, WIFI_MAX_SCAN_RESULTS);
+    for (int i =0; i < _scanCount; i++) {
+        memcpy(&_scanResults[i], &tempResults[i], sizeof(wifi_scan_result_t));
     }
     
     populateNetworkList();
-    updateStatus("Found " + String(_scanCount) + " networks");
+    updateStatus("Found " + String(_scanCount) + " unique networks");
     _mode = WIFI_MODE_IDLE;
     
     WiFi.scanDelete();
