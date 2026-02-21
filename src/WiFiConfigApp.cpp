@@ -33,7 +33,7 @@ WiFiConfigApp::~WiFiConfigApp() {
     if (_apModeActive) {
         stopAPMode();
     }
-    WiFi.mode(WIFI_OFF);
+    // 不再断开WiFi连接，保持连接状态
 }
 
 bool WiFiConfigApp::createUI() {
@@ -46,8 +46,14 @@ bool WiFiConfigApp::createUI() {
     lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 5);
     
     labelStatus = lv_label_create(scr);
-    lv_label_set_text(labelStatus, "Ready");
-    lv_obj_set_style_text_color(labelStatus, lv_color_make(0xFF, 0xFF, 0x00), 0);
+    // 检查当前WiFi连接状态
+    if (WiFi.status() == WL_CONNECTED) {
+        lv_label_set_text_fmt(labelStatus, "Connected: %s", WiFi.localIP().toString().c_str());
+        lv_obj_set_style_text_color(labelStatus, lv_color_make(0x00, 0xFF, 0x00), 0);
+    } else {
+        lv_label_set_text(labelStatus, "Ready");
+        lv_obj_set_style_text_color(labelStatus, lv_color_make(0xFF, 0xFF, 0x00), 0);
+    }
     lv_obj_set_style_text_font(labelStatus, &lv_font_montserrat_12, 0);
     lv_obj_align(labelStatus, LV_ALIGN_TOP_MID, 0, 30);
     
@@ -183,12 +189,7 @@ void WiFiConfigApp::list_select_cb(lv_event_t* e) {
 }
 
 void WiFiConfigApp::keyboard_event_cb(lv_event_t* e) {
-    lv_obj_t* kb = lv_event_get_target(e);
-    WiFiConfigApp* app = (WiFiConfigApp*)lv_event_get_user_data(e);
-    
-    if (lv_keyboard_get_textarea(kb) == app->textareaPassword) {
-        lv_keyboard_def_event_cb(e);
-    }
+    // 移除默认事件处理，避免重复输入
 }
 
 void WiFiConfigApp::startScan() {
@@ -198,8 +199,63 @@ void WiFiConfigApp::startScan() {
     clearNetworkList();
     _mode = WIFI_MODE_SCANNING;
     
+    // 强制重置WiFi模块
+    WiFi.disconnect(true);
+    delay(100);
+    WiFi.mode(WIFI_OFF);
+    delay(100);
     WiFi.mode(WIFI_STA);
-    WiFi.scanNetworks(false, true, false, 0, 0);
+    delay(500);
+    
+    Serial.println("[WiFi] Starting scan...");
+    Serial.printf("[WiFi] WiFi mode: %s\n", WiFi.getMode() == WIFI_MODE_STA ? "STA" : "AP");
+    Serial.printf("[WiFi] Free heap: %u\n", ESP.getFreeHeap());
+    
+    // 使用异步扫描
+    int n = WiFi.scanNetworks(false, true, false, 15000);
+    
+    // 等待扫描完成
+    unsigned long start = millis();
+    while (WiFi.scanComplete() == WIFI_SCAN_RUNNING && millis() - start < 20000) {
+        delay(100);
+    }
+    
+    n = WiFi.scanComplete();
+    
+    Serial.printf("[WiFi] Scan result: %d\n", n);
+    
+    if (n > 0) {
+        _scanCount = min(n, WIFI_MAX_SCAN_RESULTS);
+        
+        for (int i = 0; i < _scanCount; i++) {
+            Serial.printf("[WiFi] %d: %s (%d dBm)\n", i, WiFi.SSID(i).c_str(), WiFi.RSSI(i));
+            strncpy(_scanResults[i].ssid, WiFi.SSID(i).c_str(), WIFI_MAX_SSID_LEN - 1);
+            _scanResults[i].ssid[WIFI_MAX_SSID_LEN - 1] = '\0';
+            _scanResults[i].rssi = WiFi.RSSI(i);
+            _scanResults[i].encryption = WiFi.encryptionType(i);
+            _scanResults[i].isOpen = (_scanResults[i].encryption == WIFI_AUTH_OPEN);
+        }
+        
+        // Sort by RSSI
+        for (int i = 0; i < _scanCount - 1; i++) {
+            for (int j = i + 1; j < _scanCount; j++) {
+                if (_scanResults[j].rssi > _scanResults[i].rssi) {
+                    wifi_scan_result_t swap = _scanResults[i];
+                    _scanResults[i] = _scanResults[j];
+                    _scanResults[j] = swap;
+                }
+            }
+        }
+        
+        populateNetworkList();
+        updateStatus("Found " + String(_scanCount) + " networks");
+    } else {
+        Serial.printf("[WiFi] Scan failed with code: %d\n", n);
+        updateStatus("No networks found!");
+    }
+    
+    _mode = WIFI_MODE_IDLE;
+    WiFi.scanDelete();
 }
 
 void WiFiConfigApp::handleScanComplete() {
@@ -298,7 +354,7 @@ void WiFiConfigApp::showPasswordDialog(const char* ssid) {
     lv_obj_t* scr = getScreen();
     
     lv_obj_t* overlay = lv_obj_create(scr);
-    lv_obj_set_size(overlay, BSP_DISPLAY_WIDTH - 20, 160);
+    lv_obj_set_size(overlay, BSP_DISPLAY_WIDTH - 20, 190);
     lv_obj_align(overlay, LV_ALIGN_CENTER, 0, 0);
     lv_obj_set_style_bg_color(overlay, lv_color_make(0x30, 0x30, 0x50), 0);
     lv_obj_set_style_border_width(overlay, 2, 0);
@@ -328,7 +384,7 @@ void WiFiConfigApp::showPasswordDialog(const char* ssid) {
     
     btnConnect = lv_btn_create(overlay);
     lv_obj_set_size(btnConnect, 80, 25);
-    lv_obj_align(btnConnect, LV_ALIGN_BOTTOM_LEFT, 10, -5);
+    lv_obj_align(btnConnect, LV_ALIGN_BOTTOM_LEFT, 10, -10);
     lv_obj_add_event_cb(btnConnect, btn_connect_cb, LV_EVENT_CLICKED, this);
     lv_obj_set_style_bg_color(btnConnect, lv_color_make(0x00, 0x80, 0x00), 0);
     lv_obj_t* labelConn = lv_label_create(btnConnect);
@@ -338,7 +394,7 @@ void WiFiConfigApp::showPasswordDialog(const char* ssid) {
     
     btnCancel = lv_btn_create(overlay);
     lv_obj_set_size(btnCancel, 80, 25);
-    lv_obj_align(btnCancel, LV_ALIGN_BOTTOM_RIGHT, -10, -5);
+    lv_obj_align(btnCancel, LV_ALIGN_BOTTOM_RIGHT, -10, -10);
     lv_obj_add_event_cb(btnCancel, btn_cancel_cb, LV_EVENT_CLICKED, this);
     lv_obj_set_style_bg_color(btnCancel, lv_color_make(0x80, 0x00, 0x00), 0);
     lv_obj_t* labelCancel = lv_label_create(btnCancel);
@@ -461,9 +517,9 @@ void WiFiConfigApp::showQRUI() {
     qrCanvas = lv_canvas_create(scr);
     lv_obj_align(qrCanvas, LV_ALIGN_CENTER, 0, -20);
     
-    lv_color_t* canvasBuf = (lv_color_t*)malloc(60 * 60 * sizeof(lv_color_t));
+    lv_color_t* canvasBuf = (lv_color_t*)malloc(120 * 120 * sizeof(lv_color_t));
     if (canvasBuf) {
-        lv_canvas_set_buffer(qrCanvas, canvasBuf, 60, 60, LV_IMG_CF_TRUE_COLOR);
+        lv_canvas_set_buffer(qrCanvas, canvasBuf, 120, 120, LV_IMG_CF_TRUE_COLOR);
         lv_obj_set_user_data(qrCanvas, canvasBuf);
     }
     
@@ -559,10 +615,11 @@ void WiFiConfigApp::onUpdate() {
     }
     _lastUpdateMs = now;
     
-    if (_mode == WIFI_MODE_SCANNING) {
-        handleScanComplete();
-    }
-    else if (_mode == WIFI_MODE_CONNECTING && _connecting) {
+    // 不再需要，因为使用同步扫描
+    // if (_mode == WIFI_MODE_SCANNING) {
+    //     handleScanComplete();
+    // }
+    if (_mode == WIFI_MODE_CONNECTING && _connecting) {
         wl_status_t status = WiFi.status();
         
         if (status == WL_CONNECTED) {

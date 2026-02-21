@@ -165,9 +165,18 @@ bool StorageManager::initSPIFFS() {
     Serial.println("[Storage] Mounting SPIFFS...");
     
     if (!SPIFFS.begin(true)) {
-        Serial.println("  SPIFFS mount: FAILED");
-        spiffsReady = false;
-        return false;
+        Serial.println("  SPIFFS mount: FAILED, formatting...");
+        if (!SPIFFS.format()) {
+            Serial.println("  SPIFFS format: FAILED");
+            spiffsReady = false;
+            return false;
+        }
+        Serial.println("  SPIFFS format: OK");
+        if (!SPIFFS.begin(true)) {
+            Serial.println("  SPIFFS mount after format: FAILED");
+            spiffsReady = false;
+            return false;
+        }
     }
     
     spiffsReady = true;
