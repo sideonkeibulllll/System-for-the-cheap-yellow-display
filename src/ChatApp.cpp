@@ -126,16 +126,15 @@ void ChatApp::input_focus_cb(lv_event_t* e) {
     if (app && !app->_keyboard && app->_inputArea) {
         app->_keyboard = lv_keyboard_create(app->_screen);
         lv_obj_set_size(app->_keyboard, 240, 100);
-        lv_obj_set_pos(app->_keyboard, 0, 0);
+        lv_obj_align(app->_keyboard, LV_ALIGN_TOP_MID, 0, 0);
         lv_keyboard_set_textarea(app->_keyboard, app->_inputArea);
         lv_keyboard_set_mode(app->_keyboard, LV_KEYBOARD_MODE_TEXT_LOWER);
         
         lv_obj_set_pos(app->_inputArea, 5, 105);
-        lv_obj_move_foreground(app->_inputArea);
         lv_obj_move_foreground(app->_keyboard);
         lv_obj_move_foreground(app->_inputArea);
         
-        Serial.println("[ChatApp] keyboard at y=0, input at y=105");
+        Serial.println("[ChatApp] keyboard at top, input at y=105");
     }
 }
 
