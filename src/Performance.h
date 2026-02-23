@@ -7,7 +7,7 @@
 #include <esp_timer.h>
 #include <esp_pm.h>
 
-#define PERF_TASK_STACK_SIZE    4096
+#define PERF_TASK_STACK_SIZE    8192
 #define PERF_TASK_PRIORITY      5
 #define PERF_TICK_INTERVAL_US   1000
 

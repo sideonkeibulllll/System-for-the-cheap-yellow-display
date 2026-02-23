@@ -17,9 +17,9 @@ static bool sdReady = false;
 static bool spiffsReady = false;
 static uint8_t currentBacklight = 255;
 
-#define VDB_BUFFER_SIZE (BSP_DISPLAY_WIDTH * 15)
+#define VDB_BUFFER_SIZE (BSP_DISPLAY_WIDTH * 10)
 static lv_color_t buf1[VDB_BUFFER_SIZE];
-static lv_color_t buf2[VDB_BUFFER_SIZE];
+static lv_color_t* buf2 = nullptr;
 static lv_disp_draw_buf_t draw_buf;
 static lv_disp_drv_t disp_drv;
 static lv_indev_drv_t indev_drv;

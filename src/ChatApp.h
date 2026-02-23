@@ -4,11 +4,17 @@
 #include "AppManager.h"
 #include "ZiranmaMapping.h"
 #include "GlobalUI.h"
+#include "api_config.h"
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
-#define CHAT_INPUT_MAX_LEN      512
-#define CHAT_DP_BUFFER_SIZE     64
-#define CHAT_MSG_MAX_LEN        512
-#define CHAT_PATH_MAX_LEN       128
+#define CHAT_INPUT_MAX_LEN      200
+#define CHAT_DP_BUFFER_SIZE     24
+#define CHAT_MSG_MAX_LEN        200
+#define CHAT_PATH_MAX_LEN       48
+#define CHAT_TEMP_FILE          "/ChatApp/.response_temp"
+#define CHAT_NET_TASK_STACK     16384
+#define CHAT_NET_TASK_PRIORITY  3
 
 typedef struct ChatMessage {
     char* text;
@@ -27,12 +33,14 @@ private:
     
     lv_obj_t* _btnOpenChat;
     lv_obj_t* _btnNewChat;
-    lv_obj_t* _btnPlaceholder;
+    lv_obj_t* _btnModel;
+    lv_obj_t* _modelSelector;
     
     bool _inputPanelVisible;
     bool _doublePinyinMode;
     bool _sdCardAvailable;
     bool _dataFolderReady;
+    bool _isWaitingResponse;
     
     char _dpBuffer[CHAT_DP_BUFFER_SIZE];
     int _dpBufferLen;
@@ -44,6 +52,13 @@ private:
     ChatMessage* _msgHead;
     ChatMessage* _msgTail;
     int _msgCount;
+    
+    int _selectedModelIndex;
+    
+    TaskHandle_t _netTaskHandle;
+    char _pendingMessage[CHAT_INPUT_MAX_LEN];
+    char _responseContent[CHAT_MSG_MAX_LEN];
+    bool _responseReady;
     
     bool createUI() override;
     void destroyUI() override;
@@ -70,6 +85,7 @@ private:
     static void keyboard_btn_cb(lv_event_t* e);
     static void keyboard_event_cb(lv_event_t* e);
     static void sidebar_btn_cb(lv_event_t* e);
+    static void model_selector_cb(lv_event_t* e);
     
     void onFloatBtnClick();
     void showInputPanel();
@@ -88,6 +104,18 @@ private:
     
     void refreshMessageDisplay();
     
+    void showModelSelector();
+    void hideModelSelector();
+    void selectModel(int index);
+    void updateModelButton();
+    
+    bool checkNetworkConnection();
+    void sendAIRequestAsync(const char* userMessage);
+    static void networkTaskEntry(void* arg);
+    bool performAIRequest(const char* userMessage);
+    void processAIResponse();
+    void parseSSELine(const char* line, char* content, int maxLen);
+    
 public:
     ChatApp();
     ~ChatApp();
@@ -98,6 +126,7 @@ public:
     void onFileSelected(const char* path);
     void onOpenChat();
     void onNewChat();
+    void onModelSelect();
 };
 
 BaseApp* createChatApp();

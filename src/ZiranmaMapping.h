@@ -67,7 +67,7 @@ struct ZiranmaMapping {
             case 'm': return "ian";
             case 'x': return "ie";
             case 'q': return "iu";
-            case 'r': return "er";
+            case 'r': return "uan";
             case 'p': return "un";
             
             case 'w':
@@ -85,7 +85,7 @@ struct ZiranmaMapping {
                 return "uai";
                 
             case 'o':
-                if (initial == 'b' || initial == 'p' || initial == 'm' || initial == 'f') return "o";
+                if (initial == 'b' || initial == 'p' || initial == 'm'|| initial == 'w') return "o";
                 return "uo";
                 
             case 's':

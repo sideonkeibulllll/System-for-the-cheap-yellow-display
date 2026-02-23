@@ -10,3 +10,12 @@
 示例教程*.md
 partitions.csv
 compile_commands.json
+src/api_config.h
+
+# Temporary files and archives
+tftziku-master.zip
+tftziku-master/
+
+# JSON schema and mapping files
+ziranma-mapping.json
+ziranma.schema.json

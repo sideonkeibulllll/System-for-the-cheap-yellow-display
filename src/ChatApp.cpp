@@ -2,6 +2,8 @@
 #include "Storage.h"
 #include "FileExplorerApp.h"
 #include <SD.h>
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
 
 static void onOpenChatCallback(void* user_data) {
     ChatApp* app = (ChatApp*)user_data;
@@ -13,6 +15,11 @@ static void onNewChatCallback(void* user_data) {
     if (app) app->onNewChat();
 }
 
+static void onModelSelectCallback(void* user_data) {
+    ChatApp* app = (ChatApp*)user_data;
+    if (app) app->onModelSelect();
+}
+
 ChatApp::ChatApp() : BaseApp("Chat") {
     _blankScreen = nullptr;
     _floatBtn = nullptr;
@@ -22,11 +29,13 @@ ChatApp::ChatApp() : BaseApp("Chat") {
     _msgContainer = nullptr;
     _btnOpenChat = nullptr;
     _btnNewChat = nullptr;
-    _btnPlaceholder = nullptr;
+    _btnModel = nullptr;
+    _modelSelector = nullptr;
     _inputPanelVisible = false;
     _doublePinyinMode = false;
     _sdCardAvailable = false;
     _dataFolderReady = false;
+    _isWaitingResponse = false;
     _dpBufferLen = 0;
     _dpBuffer[0] = '\0';
     _preModeText[0] = '\0';
@@ -35,6 +44,11 @@ ChatApp::ChatApp() : BaseApp("Chat") {
     _msgHead = nullptr;
     _msgTail = nullptr;
     _msgCount = 0;
+    _selectedModelIndex = 0;
+    _netTaskHandle = nullptr;
+    _pendingMessage[0] = '\0';
+    _responseContent[0] = '\0';
+    _responseReady = false;
 }
 
 ChatApp::~ChatApp() {
@@ -127,6 +141,7 @@ void ChatApp::saveState() {
     
     stateFile.printf("chat_path=%s\n", _currentChatPath);
     stateFile.printf("input_text=%s\n", _inputArea ? lv_textarea_get_text(_inputArea) : "");
+    stateFile.printf("model_index=%d\n", _selectedModelIndex);
     
     stateFile.close();
     Serial.println("[ChatApp] State saved");
@@ -147,6 +162,7 @@ bool ChatApp::loadState() {
     
     char chatPath[CHAT_PATH_MAX_LEN] = "";
     char inputText[CHAT_INPUT_MAX_LEN] = "";
+    int modelIndex = 0;
     
     while (stateFile.available()) {
         String line = stateFile.readStringUntil('\n');
@@ -156,10 +172,17 @@ bool ChatApp::loadState() {
             strncpy(chatPath, line.c_str() + 10, CHAT_PATH_MAX_LEN - 1);
         } else if (line.startsWith("input_text=")) {
             strncpy(inputText, line.c_str() + 11, CHAT_INPUT_MAX_LEN - 1);
+        } else if (line.startsWith("model_index=")) {
+            modelIndex = atoi(line.c_str() + 12);
+            if (modelIndex < 0 || modelIndex >= (int)AI_MODEL_COUNT) {
+                modelIndex = 0;
+            }
         }
     }
     
     stateFile.close();
+    
+    _selectedModelIndex = modelIndex;
     
     if (chatPath[0] != '\0' && SD.exists(chatPath)) {
         loadChatFromFile(chatPath);
@@ -234,7 +257,10 @@ void ChatApp::setupSidebarButtons() {
     
     _btnOpenChat = ui.addSidebarButton(LV_SYMBOL_LIST, onOpenChatCallback, this);
     _btnNewChat = ui.addSidebarButton(LV_SYMBOL_EDIT, onNewChatCallback, this);
-    _btnPlaceholder = ui.addSidebarButton("-", nullptr, nullptr);
+    
+    static char modelSymbol[2] = "D";
+    modelSymbol[0] = AI_MODELS[_selectedModelIndex].name[0];
+    _btnModel = ui.addSidebarButton(modelSymbol, onModelSelectCallback, this);
     
     Serial.println("[ChatApp] Sidebar buttons added");
 }
@@ -244,11 +270,13 @@ void ChatApp::clearSidebarButtons() {
     
     ui.removeSidebarButton(_btnOpenChat);
     ui.removeSidebarButton(_btnNewChat);
-    ui.removeSidebarButton(_btnPlaceholder);
+    ui.removeSidebarButton(_btnModel);
     
     _btnOpenChat = nullptr;
     _btnNewChat = nullptr;
-    _btnPlaceholder = nullptr;
+    _btnModel = nullptr;
+    
+    hideModelSelector();
     
     Serial.println("[ChatApp] Sidebar buttons cleared");
 }
@@ -504,8 +532,14 @@ void ChatApp::sendMessage() {
     
     const char* text = lv_textarea_get_text(_inputArea);
     if (text && strlen(text) > 0) {
-        addMessage(text, true);
+        char messageCopy[CHAT_INPUT_MAX_LEN];
+        strncpy(messageCopy, text, CHAT_INPUT_MAX_LEN - 1);
+        messageCopy[CHAT_INPUT_MAX_LEN - 1] = '\0';
+        
+        addMessage(messageCopy, true);
         lv_textarea_set_text(_inputArea, "");
+        
+        sendAIRequestAsync(messageCopy);
     }
 }
 
@@ -517,29 +551,10 @@ void ChatApp::onOpenChat() {
         return;
     }
     
-    FileExplorerApp::selectCallback = [](const char* path) {
-        Serial.printf("[ChatApp] File selected callback: %s\n", path);
-        ChatApp* chatApp = (ChatApp*)AppMgr.findApp("Chat");
-        if (chatApp) {
-            chatApp->onFileSelected(path);
-        } else {
-            Serial.println("[ChatApp] ChatApp not found in callback");
-        }
-    };
+    FileExplorerApp::_explorerMode = MODE_SELECT_FILE;
+    strncpy(FileExplorerApp::selectStartPath, "S:/ChatApp/chats", MAX_PATH_LENGTH - 1);
+    Serial.printf("[ChatApp] Set select mode, path: %s\n", FileExplorerApp::selectStartPath);
     
-    FileExplorerApp::selectStartPath[0] = '\0';
-    
-    Serial.println("[ChatApp] Looking for FileExplorer app...");
-    BaseApp* filesApp = AppMgr.findApp("FileExplorer");
-    if (filesApp) {
-        FileExplorerApp* fileExplorer = (FileExplorerApp*)filesApp;
-        fileExplorer->setSelectMode(MODE_SELECT_FILE, "S:/ChatApp/chats");
-        Serial.println("[ChatApp] FileExplorer found, set select mode");
-    } else {
-        Serial.println("[ChatApp] FileExplorer not found in active/paused apps");
-    }
-    
-    Serial.println("[ChatApp] Switching to FileExplorer...");
     AppMgr.switchToApp("FileExplorer");
 }
 
@@ -558,6 +573,25 @@ void ChatApp::onFileSelected(const char* path) {
 }
 
 void ChatApp::onUpdate() {
+    static uint32_t lastCheck = 0;
+    if (_isWaitingResponse && millis() - lastCheck > 2000) {
+        Serial.printf("[ChatApp] onUpdate: waiting=%d, responseReady=%d\n", 
+            _isWaitingResponse, _responseReady);
+        lastCheck = millis();
+    }
+    
+    if (_responseReady) {
+        Serial.printf("[ChatApp] onUpdate: response ready, len=%d\n", strlen(_responseContent));
+        _responseReady = false;
+        _isWaitingResponse = false;
+        
+        if (_responseContent[0] != '\0') {
+            addMessage(_responseContent, false);
+            Serial.printf("[ChatApp] AI response displayed: %d bytes\n", strlen(_responseContent));
+        }
+        
+        _responseContent[0] = '\0';
+    }
 }
 
 void ChatApp::onFloatBtnClick() {
@@ -835,6 +869,387 @@ app_info_t ChatApp::getInfo() const {
     info.type = APP_TYPE_USER;
     info.enabled = true;
     return info;
+}
+
+void ChatApp::onModelSelect() {
+    Serial.println("[ChatApp] onModelSelect");
+    if (_modelSelector) {
+        hideModelSelector();
+    } else {
+        showModelSelector();
+    }
+}
+
+void ChatApp::showModelSelector() {
+    if (_modelSelector) return;
+    
+    _modelSelector = lv_obj_create(lv_layer_top());
+    lv_obj_set_size(_modelSelector, 120, 100);
+    lv_obj_align(_modelSelector, LV_ALIGN_TOP_LEFT, 55, 130);
+    lv_obj_set_style_bg_color(_modelSelector, lv_color_make(0x30, 0x30, 0x30), 0);
+    lv_obj_set_style_border_width(_modelSelector, 1, 0);
+    lv_obj_set_style_border_color(_modelSelector, lv_color_make(0x60, 0x60, 0x60), 0);
+    lv_obj_set_style_radius(_modelSelector, 5, 0);
+    lv_obj_set_style_pad_all(_modelSelector, 5, 0);
+    lv_obj_set_flex_flow(_modelSelector, LV_FLEX_FLOW_COLUMN);
+    
+    for (size_t i = 0; i < AI_MODEL_COUNT; i++) {
+        lv_obj_t* btn = lv_btn_create(_modelSelector);
+        lv_obj_set_size(btn, LV_PCT(100), 25);
+        lv_obj_set_style_bg_color(btn, i == (size_t)_selectedModelIndex ? 
+            lv_color_make(0x00, 0x80, 0xC0) : lv_color_make(0x50, 0x50, 0x50), 0);
+        lv_obj_add_event_cb(btn, model_selector_cb, LV_EVENT_CLICKED, this);
+        
+        lv_obj_t* label = lv_label_create(btn);
+        lv_label_set_text(label, AI_MODELS[i].name);
+        lv_obj_set_style_text_color(label, lv_color_white(), 0);
+        lv_obj_set_style_text_font(label, &lv_font_montserrat_12, 0);
+        lv_obj_center(label);
+    }
+    
+    Serial.println("[ChatApp] Model selector shown");
+}
+
+void ChatApp::hideModelSelector() {
+    if (_modelSelector) {
+        lv_obj_del(_modelSelector);
+        _modelSelector = nullptr;
+        Serial.println("[ChatApp] Model selector hidden");
+    }
+}
+
+void ChatApp::selectModel(int index) {
+    if (index < 0 || index >= (int)AI_MODEL_COUNT) return;
+    
+    _selectedModelIndex = index;
+    updateModelButton();
+    hideModelSelector();
+    Serial.printf("[ChatApp] Selected model: %s\n", AI_MODELS[index].name);
+}
+
+void ChatApp::updateModelButton() {
+    if (_btnModel) {
+        lv_obj_t* label = lv_obj_get_child(_btnModel, 0);
+        if (label) {
+            char text[2] = {AI_MODELS[_selectedModelIndex].name[0], '\0'};
+            lv_label_set_text(label, text);
+        }
+    }
+}
+
+void ChatApp::model_selector_cb(lv_event_t* e) {
+    ChatApp* app = (ChatApp*)lv_event_get_user_data(e);
+    lv_obj_t* btn = (lv_obj_t*)lv_event_get_target(e);
+    
+    if (!app || !btn) return;
+    
+    lv_obj_t* parent = lv_obj_get_parent(btn);
+    int index = 0;
+    lv_obj_t* child = lv_obj_get_child(parent, 0);
+    while (child && child != btn) {
+        child = lv_obj_get_child(parent, ++index);
+    }
+    
+    if (child == btn) {
+        app->selectModel(index);
+    }
+}
+
+bool ChatApp::checkNetworkConnection() {
+    if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("[ChatApp] WiFi not connected");
+        return false;
+    }
+    return true;
+}
+
+void ChatApp::sendAIRequestAsync(const char* userMessage) {
+    Serial.printf("[ChatApp] sendAIRequestAsync: '%s', waiting=%d\n", userMessage, _isWaitingResponse);
+    
+    if (!checkNetworkConnection()) {
+        _isWaitingResponse = false;
+        addMessage("Error: No network", false);
+        return;
+    }
+    
+    if (_isWaitingResponse) {
+        Serial.println("[ChatApp] Already waiting");
+        return;
+    }
+    
+    _isWaitingResponse = true;
+    strncpy(_pendingMessage, userMessage, CHAT_INPUT_MAX_LEN - 1);
+    _pendingMessage[CHAT_INPUT_MAX_LEN - 1] = '\0';
+    _responseReady = false;
+    _responseContent[0] = '\0';
+    
+    Serial.println("[ChatApp] Creating network task...");
+    
+    BaseType_t ret = xTaskCreatePinnedToCore(
+        networkTaskEntry,
+        "ChatNetTask",
+        CHAT_NET_TASK_STACK,
+        this,
+        CHAT_NET_TASK_PRIORITY,
+        &_netTaskHandle,
+        0
+    );
+    
+    if (ret != pdPASS) {
+        Serial.println("[ChatApp] Failed to create network task");
+        _isWaitingResponse = false;
+        addMessage("Error: Task create failed", false);
+        _netTaskHandle = nullptr;
+    } else {
+        Serial.println("[ChatApp] Network task started on Core 0");
+    }
+}
+
+void ChatApp::networkTaskEntry(void* arg) {
+    ChatApp* app = (ChatApp*)arg;
+    
+    Serial.println("[ChatNet] Task running");
+    
+    bool success = app->performAIRequest(app->_pendingMessage);
+    
+    if (!success) {
+        strcpy(app->_responseContent, "Error: Request failed");
+        app->_responseReady = true;
+    }
+    
+    app->_netTaskHandle = nullptr;
+    
+    Serial.println("[ChatNet] Task done");
+    vTaskDelete(NULL);
+}
+
+bool ChatApp::performAIRequest(const char* userMessage) {
+    const ai_model_config_t& model = AI_MODELS[_selectedModelIndex];
+    Serial.printf("[ChatNet] Request to %s\n", model.name);
+    
+    File tempFile = SD.open(CHAT_TEMP_FILE, FILE_WRITE);
+    if (!tempFile) {
+        Serial.println("[ChatNet] Failed to create temp file");
+        return false;
+    }
+    
+    WiFiClientSecure* client = new WiFiClientSecure();
+    client->setInsecure();
+    client->setTimeout(30000);
+    
+    char host[64];
+    int port = 443;
+    const char* urlStart = strstr(model.endpoint, "https://");
+    if (urlStart) {
+        urlStart += 8;
+    } else {
+        urlStart = model.endpoint;
+    }
+    const char* path = strchr(urlStart, '/');
+    int hostLen = path ? (path - urlStart) : strlen(urlStart);
+    if (hostLen > 63) hostLen = 63;
+    strncpy(host, urlStart, hostLen);
+    host[hostLen] = '\0';
+    const char* uri = path ? path : "/";
+    
+    Serial.printf("[ChatNet] Connecting to %s:%d%s\n", host, port, uri);
+    
+    if (!client->connect(host, port)) {
+        Serial.println("[ChatNet] Connection failed");
+        tempFile.close();
+        SD.remove(CHAT_TEMP_FILE);
+        delete client;
+        return false;
+    }
+    
+    char body[CHAT_INPUT_MAX_LEN + 128];
+    snprintf(body, sizeof(body), 
+        "{\"model\":\"%s\",\"messages\":[{\"role\":\"user\",\"content\":\"%s\"}],\"stream\":true}",
+        model.model, userMessage);
+    int bodyLen = strlen(body);
+    
+    client->printf("POST %s HTTP/1.1\r\n", uri);
+    client->printf("Host: %s\r\n", host);
+    client->print("Content-Type: application/json\r\n");
+    client->printf("Authorization: Bearer %s\r\n", model.apiKey);
+    client->printf("Content-Length: %d\r\n", bodyLen);
+    client->print("Connection: close\r\n");
+    client->print("\r\n");
+    client->print(body);
+    
+    Serial.println("[ChatNet] Request sent, receiving...");
+    
+    char* lineBuf = (char*)malloc(1024);
+    if (!lineBuf) {
+        Serial.println("[ChatNet] Failed to allocate receive buffer");
+        tempFile.close();
+        SD.remove(CHAT_TEMP_FILE);
+        delete client;
+        return false;
+    }
+    
+    int linePos = 0;
+    bool inBody = false;
+    uint32_t timeout = millis();
+    uint32_t lastPrint = 0;
+    int totalBytes = 0;
+    
+    while (millis() - timeout < 30000) {
+        if (client->available()) {
+            timeout = millis();
+            char c = client->read();
+            totalBytes++;
+            
+            if (!inBody) {
+                if (c == '\n') {
+                    lineBuf[linePos] = '\0';
+                    if (linePos == 0 || (linePos == 1 && lineBuf[0] == '\r')) {
+                        inBody = true;
+                        Serial.println("[ChatNet] Headers received, entering body");
+                    }
+                    linePos = 0;
+                } else if (linePos < 1023) {
+                    lineBuf[linePos++] = c;
+                }
+            } else {
+                if (c == '\n') {
+                    lineBuf[linePos] = '\0';
+                    if (linePos > 0 && lineBuf[0] != '\r') {
+                        tempFile.println(lineBuf);
+                    }
+                    linePos = 0;
+                } else if (linePos < 1023) {
+                    lineBuf[linePos++] = c;
+                }
+            }
+        } else if (!client->connected()) {
+            Serial.println("[ChatNet] Server disconnected");
+            break;
+        } else {
+            if (millis() - lastPrint > 5000) {
+                Serial.printf("[ChatNet] Waiting... bytes=%d\n", totalBytes);
+                lastPrint = millis();
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+    
+    free(lineBuf);
+    
+    Serial.printf("[ChatNet] Received %d bytes\n", totalBytes);
+    
+    client->stop();
+    delete client;
+    tempFile.close();
+    
+    Serial.println("[ChatNet] Response saved, parsing...");
+    
+    processAIResponse();
+    return true;
+}
+
+void ChatApp::processAIResponse() {
+    if (!SD.exists(CHAT_TEMP_FILE)) {
+        Serial.println("[ChatNet] Temp file not found");
+        strcpy(_responseContent, "Error: No response");
+        _responseReady = true;
+        return;
+    }
+    
+    File tempFile = SD.open(CHAT_TEMP_FILE);
+    if (!tempFile) {
+        Serial.println("[ChatNet] Failed to open temp file");
+        strcpy(_responseContent, "Error: Read failed");
+        _responseReady = true;
+        return;
+    }
+    
+    Serial.printf("[ChatNet] Temp file size: %d bytes\n", tempFile.size());
+    
+    _responseContent[0] = '\0';
+    int contentLen = 0;
+    
+    char* lineBuf = (char*)malloc(1024);
+    if (!lineBuf) {
+        Serial.println("[ChatNet] Failed to allocate line buffer");
+        tempFile.close();
+        strcpy(_responseContent, "Error: Memory");
+        _responseReady = true;
+        return;
+    }
+    
+    int linePos = 0;
+    int lineCount = 0;
+    
+    while (tempFile.available() && contentLen < CHAT_MSG_MAX_LEN - 64) {
+        char c = tempFile.read();
+        if (c == '\n') {
+            lineBuf[linePos] = '\0';
+            lineCount++;
+            
+            if (lineCount <= 5) {
+                Serial.printf("[ChatNet] Line %d: '%s'\n", lineCount, lineBuf);
+            }
+            
+            int lineLen = strlen(lineBuf);
+            if (lineLen > 0 && lineBuf[lineLen-1] == '\r') {
+                lineBuf[--lineLen] = '\0';
+            }
+            
+            if (strncmp(lineBuf, "data: ", 6) == 0) {
+                const char* data = lineBuf + 6;
+                if (strcmp(data, "[DONE]") == 0) {
+                    Serial.println("[ChatNet] Got [DONE]");
+                    break;
+                }
+                
+                char content[128];
+                parseSSELine(data, content, sizeof(content));
+                int cLen = strlen(content);
+                if (cLen > 0 && contentLen + cLen < CHAT_MSG_MAX_LEN - 1) {
+                    strcat(_responseContent, content);
+                    contentLen += cLen;
+                }
+            }
+            
+            linePos = 0;
+        } else if (linePos < 1023) {
+            lineBuf[linePos++] = c;
+        }
+    }
+    
+    free(lineBuf);
+    tempFile.close();
+    SD.remove(CHAT_TEMP_FILE);
+    
+    _responseReady = true;
+    Serial.printf("[ChatNet] Parsed response: %d bytes from %d lines\n", contentLen, lineCount);
+}
+
+void ChatApp::parseSSELine(const char* line, char* content, int maxLen) {
+    content[0] = '\0';
+    
+    const char* contentStart = strstr(line, "\"content\":\"");
+    if (!contentStart) return;
+    
+    contentStart += 11;
+    
+    int i = 0;
+    while (*contentStart && *contentStart != '"' && i < maxLen - 1) {
+        if (*contentStart == '\\' && *(contentStart + 1) == 'n') {
+            content[i++] = '\n';
+            contentStart += 2;
+        } else if (*contentStart == '\\' && *(contentStart + 1) == '"') {
+            content[i++] = '"';
+            contentStart += 2;
+        } else if (*contentStart == '\\' && *(contentStart + 1) == '\\') {
+            content[i++] = '\\';
+            contentStart += 2;
+        } else {
+            content[i++] = *contentStart++;
+        }
+    }
+    content[i] = '\0';
 }
 
 BaseApp* createChatApp() {
