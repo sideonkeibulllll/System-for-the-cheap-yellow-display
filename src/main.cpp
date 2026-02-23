@@ -21,8 +21,11 @@ static TaskHandle_t appTaskHandle = nullptr;
 static lv_obj_t* labelHomeStatus;
 static lv_obj_t* labelHomePerf;
 static lv_obj_t* labelTime;
+static lv_obj_t* labelDate;
 static lv_timer_t* homeUpdateTimer = nullptr;
 static lv_timer_t* timeUpdateTimer = nullptr;
+
+static const char* weekdays[] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
 
 static void home_update_cb(lv_timer_t* timer) {
     if (labelHomePerf && lv_obj_is_valid(labelHomePerf)) {
@@ -42,7 +45,14 @@ static void time_update_cb(lv_timer_t* timer) {
         time_t now;
         time(&now);
         localtime_r(&now, &timeinfo);
-        lv_label_set_text_fmt(labelTime, "%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
+        lv_label_set_text_fmt(labelTime, "%02d:%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+        
+        if (labelDate && lv_obj_is_valid(labelDate)) {
+            lv_label_set_text_fmt(labelDate, "%d/%d %s", 
+                timeinfo.tm_mon + 1, 
+                timeinfo.tm_mday, 
+                weekdays[timeinfo.tm_wday]);
+        }
     }
 }
 
@@ -97,7 +107,7 @@ static void createHomeUI() {
     }
     
     lv_obj_t* timeContainer = lv_obj_create(home);
-    lv_obj_set_size(timeContainer, BSP_DISPLAY_WIDTH - 20, 55);
+    lv_obj_set_size(timeContainer, BSP_DISPLAY_WIDTH - 20, 75);
     lv_obj_set_style_bg_color(timeContainer, lv_color_make(0x20, 0x20, 0x20), 0);
     lv_obj_set_style_border_width(timeContainer, 1, 0);
     lv_obj_set_style_border_color(timeContainer, lv_color_black(), 0);
@@ -107,18 +117,18 @@ static void createHomeUI() {
     lv_obj_align(timeContainer, LV_ALIGN_TOP_MID, 0, 160);
     
     labelTime = lv_label_create(timeContainer);
-    lv_label_set_text(labelTime, "--:--");
+    lv_label_set_text(labelTime, "--:--:--");
     lv_obj_set_style_text_color(labelTime, lv_color_black(), 0);
     lv_obj_set_style_text_font(labelTime, &lv_font_montserrat_28, 0);
-    lv_obj_center(labelTime);
+    lv_obj_align(labelTime, LV_ALIGN_TOP_MID, 0, 5);
+    
+    labelDate = lv_label_create(timeContainer);
+    lv_label_set_text(labelDate, "-/- ------");
+    lv_obj_set_style_text_color(labelDate, lv_color_make(0x40, 0x40, 0x40), 0);
+    lv_obj_set_style_text_font(labelDate, &lv_font_montserrat_14, 0);
+    lv_obj_align(labelDate, LV_ALIGN_BOTTOM_MID, 0, -5);
     
     timeUpdateTimer = lv_timer_create(time_update_cb, 1000, NULL);
-    
-    lv_obj_t* hint = lv_label_create(home);
-    lv_label_set_text(hint, "Tap icon to launch app");
-    lv_obj_set_style_text_color(hint, lv_color_make(0x60, 0x60, 0x60), 0);
-    lv_obj_set_style_text_font(hint, &lv_font_montserrat_10, 0);
-    lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -10);
     
     homeUpdateTimer = lv_timer_create(home_update_cb, 500, NULL);
 }

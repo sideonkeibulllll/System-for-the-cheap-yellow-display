@@ -363,12 +363,6 @@ void AppManager::createHomeScreen() {
     lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
     lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 5);
     
-    lv_obj_t* hint = lv_label_create(_homeScreen);
-    lv_label_set_text(hint, LV_SYMBOL_LEFT " Back  |  " LV_SYMBOL_POWER " Sleep");
-    lv_obj_set_style_text_color(hint, lv_color_make(0x80, 0x80, 0x80), 0);
-    lv_obj_set_style_text_font(hint, &lv_font_montserrat_12, 0);
-    lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -5);
-    
     _appContainer = lv_obj_create(_homeScreen);
     lv_obj_set_size(_appContainer, BSP_DISPLAY_WIDTH - 10, BSP_DISPLAY_HEIGHT - 50);
     lv_obj_set_style_bg_color(_appContainer, lv_color_make(0x20, 0x20, 0x20), 0);
