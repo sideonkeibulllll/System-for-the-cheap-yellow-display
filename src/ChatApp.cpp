@@ -3,12 +3,17 @@
 ChatApp::ChatApp() : BaseApp("Chat") {
     _blankScreen = nullptr;
     _floatBtn = nullptr;
+    _inputArea = nullptr;
+    _keyboard = nullptr;
+    _inputPanelVisible = false;
 }
 
 ChatApp::~ChatApp() {
 }
 
 bool ChatApp::createUI() {
+    Serial.println("[ChatApp] createUI start");
+    
     _blankScreen = lv_obj_create(_screen);
     lv_obj_set_size(_blankScreen, LV_PCT(100), LV_PCT(100));
     lv_obj_set_style_bg_color(_blankScreen, lv_color_make(0x20, 0x20, 0x20), 0);
@@ -29,10 +34,37 @@ bool ChatApp::createUI() {
     lv_obj_set_style_text_color(btnIcon, lv_color_white(), 0);
     lv_obj_center(btnIcon);
     
+    _inputArea = lv_textarea_create(lv_layer_top());
+    lv_obj_set_size(_inputArea, 230, 60);
+    lv_obj_set_pos(_inputArea, 5, 260);
+    lv_textarea_set_max_length(_inputArea, CHAT_INPUT_MAX_LEN);
+    lv_textarea_set_placeholder_text(_inputArea, "Input...");
+    lv_obj_set_style_bg_color(_inputArea, lv_color_make(0x50, 0x50, 0x50), 0);
+    lv_obj_set_style_text_color(_inputArea, lv_color_white(), 0);
+    lv_obj_set_style_border_color(_inputArea, lv_color_make(0x00, 0x80, 0xC0), 0);
+    lv_obj_set_style_border_width(_inputArea, 2, 0);
+    lv_obj_set_style_radius(_inputArea, 4, 0);
+    lv_obj_set_style_text_font(_inputArea, &lv_font_montserrat_14, 0);
+    lv_textarea_set_one_line(_inputArea, false);
+    lv_obj_add_event_cb(_inputArea, input_focus_cb, LV_EVENT_FOCUSED, this);
+    lv_obj_add_event_cb(_inputArea, input_defocus_cb, LV_EVENT_DEFOCUSED, this);
+    lv_obj_add_flag(_inputArea, LV_OBJ_FLAG_HIDDEN);
+    
+    Serial.println("[ChatApp] createUI done, inputArea created");
+    
     return true;
 }
 
 void ChatApp::destroyUI() {
+    Serial.println("[ChatApp] destroyUI");
+    if (_keyboard) {
+        lv_obj_del(_keyboard);
+        _keyboard = nullptr;
+    }
+    if (_inputArea) {
+        lv_obj_del(_inputArea);
+        _inputArea = nullptr;
+    }
     if (_floatBtn) {
         lv_obj_del(_floatBtn);
         _floatBtn = nullptr;
@@ -44,12 +76,79 @@ void ChatApp::onUpdate() {
 }
 
 void ChatApp::onFloatBtnClick() {
+    Serial.println("[ChatApp] onFloatBtnClick");
+    toggleInputPanel();
+}
+
+void ChatApp::showInputPanel() {
+    Serial.println("[ChatApp] showInputPanel start");
+    if (_inputArea) {
+        lv_obj_clear_flag(_inputArea, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_pos(_inputArea, 5, 260);
+        lv_obj_move_foreground(_inputArea);
+        _inputPanelVisible = true;
+        Serial.printf("[ChatApp] inputArea shown at y=260, hidden flag cleared\n");
+    } else {
+        Serial.println("[ChatApp] ERROR: _inputArea is null!");
+    }
+}
+
+void ChatApp::hideInputPanel() {
+    Serial.println("[ChatApp] hideInputPanel");
+    if (_keyboard) {
+        lv_obj_del(_keyboard);
+        _keyboard = nullptr;
+    }
+    if (_inputArea) {
+        lv_obj_add_flag(_inputArea, LV_OBJ_FLAG_HIDDEN);
+    }
+    _inputPanelVisible = false;
+}
+
+void ChatApp::toggleInputPanel() {
+    Serial.printf("[ChatApp] toggleInputPanel, current visible=%d\n", _inputPanelVisible);
+    if (_inputPanelVisible) {
+        hideInputPanel();
+    } else {
+        showInputPanel();
+    }
 }
 
 void ChatApp::float_btn_cb(lv_event_t* e) {
+    Serial.println("[ChatApp] float_btn_cb triggered");
     ChatApp* app = (ChatApp*)lv_event_get_user_data(e);
     if (app) {
         app->onFloatBtnClick();
+    } else {
+        Serial.println("[ChatApp] ERROR: app is null in callback!");
+    }
+}
+
+void ChatApp::input_focus_cb(lv_event_t* e) {
+    Serial.println("[ChatApp] input_focus_cb - keyboard shown");
+    ChatApp* app = (ChatApp*)lv_event_get_user_data(e);
+    if (app && !app->_keyboard && app->_inputArea) {
+        app->_keyboard = lv_keyboard_create(lv_layer_top());
+        lv_obj_set_size(app->_keyboard, 240, 100);
+        lv_obj_set_pos(app->_keyboard, 0, 0);
+        lv_keyboard_set_textarea(app->_keyboard, app->_inputArea);
+        lv_keyboard_set_mode(app->_keyboard, LV_KEYBOARD_MODE_TEXT_LOWER);
+        
+        lv_obj_set_pos(app->_inputArea, 5, 105);
+        Serial.println("[ChatApp] keyboard created, input moved to y=105");
+    }
+}
+
+void ChatApp::input_defocus_cb(lv_event_t* e) {
+    Serial.println("[ChatApp] input_defocus_cb - keyboard hidden");
+    ChatApp* app = (ChatApp*)lv_event_get_user_data(e);
+    if (app && app->_keyboard) {
+        lv_obj_del(app->_keyboard);
+        app->_keyboard = nullptr;
+        
+        if (app->_inputArea) {
+            lv_obj_set_pos(app->_inputArea, 5, 260);
+        }
     }
 }
 
