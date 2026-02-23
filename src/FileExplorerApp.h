@@ -13,11 +13,18 @@ typedef enum {
     STORAGE_SD = 1
 } storage_type_t;
 
+typedef enum {
+    MODE_BROWSE = 0,
+    MODE_SELECT_FILE = 1
+} explorer_mode_t;
+
 typedef struct {
     char name[FILENAME_MAX_LEN];
     bool isDirectory;
     size_t size;
 } file_entry_t;
+
+typedef void (*file_select_callback_t)(const char* path);
 
 class FileExplorerApp : public BaseApp {
 private:
@@ -27,9 +34,11 @@ private:
     lv_obj_t* btnBack;
     lv_obj_t* btnUp;
     lv_obj_t* btnSwitch;
+    lv_obj_t* btnSelect;
     
     char currentPath[MAX_PATH_LENGTH];
     storage_type_t currentStorage;
+    explorer_mode_t explorerMode;
     
     std::vector<file_entry_t> fileList;
     int selectedIndex;
@@ -51,11 +60,13 @@ private:
     void selectFile(int index);
     
     void switchStorage();
+    void confirmSelection();
     
     static void back_btn_cb(lv_event_t* e);
     static void up_btn_cb(lv_event_t* e);
     static void switch_btn_cb(lv_event_t* e);
     static void list_click_cb(lv_event_t* e);
+    static void select_btn_cb(lv_event_t* e);
     
 public:
     FileExplorerApp();
@@ -63,6 +74,12 @@ public:
     
     void onUpdate() override;
     app_info_t getInfo() const override;
+    
+    void setSelectMode(explorer_mode_t mode, const char* startPath = nullptr);
+    explorer_mode_t getMode() const { return explorerMode; }
+    
+    static file_select_callback_t selectCallback;
+    static char selectStartPath[MAX_PATH_LENGTH];
 };
 
 BaseApp* createFileExplorerApp();

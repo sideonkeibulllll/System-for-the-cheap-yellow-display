@@ -2,8 +2,18 @@
 #define CHATAPP_H
 
 #include "AppManager.h"
+#include "ZiranmaMapping.h"
 
 #define CHAT_INPUT_MAX_LEN      512
+#define CHAT_DP_BUFFER_SIZE     64
+#define CHAT_MSG_MAX_LEN        512
+#define CHAT_PATH_MAX_LEN       128
+
+typedef struct ChatMessage {
+    char* text;
+    bool isSent;
+    struct ChatMessage* next;
+} ChatMessage;
 
 class ChatApp : public BaseApp {
 private:
@@ -11,20 +21,68 @@ private:
     lv_obj_t* _floatBtn;
     lv_obj_t* _inputArea;
     lv_obj_t* _keyboard;
+    lv_obj_t* _modeBtn;
+    lv_obj_t* _msgContainer;
+    
+    lv_obj_t* _sidebar;
+    lv_obj_t* _btnOpenChat;
+    lv_obj_t* _btnNewChat;
+    lv_obj_t* _btnPlaceholder;
     
     bool _inputPanelVisible;
+    bool _doublePinyinMode;
+    bool _sdCardAvailable;
+    bool _dataFolderReady;
+    
+    char _dpBuffer[CHAT_DP_BUFFER_SIZE];
+    int _dpBufferLen;
+    char _preModeText[CHAT_INPUT_MAX_LEN];
+    
+    char _currentChatPath[CHAT_PATH_MAX_LEN];
+    int _nextChatIndex;
+    
+    ChatMessage* _msgHead;
+    ChatMessage* _msgTail;
+    int _msgCount;
     
     bool createUI() override;
     void destroyUI() override;
     
+    void createSidebar();
+    void destroySidebar();
+    
+    bool initDataFolder();
+    int getNextChatIndex();
+    void saveChatToFile();
+    bool loadChatFromFile(const char* path);
+    void clearMessages();
+    void addMessageToList(const char* text, bool isSent);
+    
     static void float_btn_cb(lv_event_t* e);
     static void input_focus_cb(lv_event_t* e);
     static void input_defocus_cb(lv_event_t* e);
+    static void keyboard_btn_cb(lv_event_t* e);
+    static void keyboard_event_cb(lv_event_t* e);
+    static void sidebar_btn_cb(lv_event_t* e);
     
     void onFloatBtnClick();
     void showInputPanel();
     void hideInputPanel();
     void toggleInputPanel();
+    
+    void toggleDoublePinyinMode();
+    void updateModeButtonStyle();
+    void processDoublePinyinInput(const char* newChars);
+    void flushDpBuffer();
+    void onKeyboardButtonClick(lv_obj_t* btn);
+    
+    lv_obj_t* createMessageBubble(lv_color_t bgColor, const char* text);
+    void addMessage(const char* text, bool isSent);
+    void sendMessage();
+    
+    void onOpenChat();
+    void onNewChat();
+    void refreshMessageDisplay();
     
 public:
     ChatApp();
@@ -32,6 +90,8 @@ public:
     
     void onUpdate() override;
     app_info_t getInfo() const override;
+    
+    void onFileSelected(const char* path);
 };
 
 BaseApp* createChatApp();

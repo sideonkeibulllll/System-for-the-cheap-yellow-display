@@ -5,6 +5,9 @@
 #include <SD.h>
 #include <SPIFFS.h>
 
+file_select_callback_t FileExplorerApp::selectCallback = nullptr;
+char FileExplorerApp::selectStartPath[MAX_PATH_LENGTH] = "/";
+
 FileExplorerApp::FileExplorerApp() : BaseApp("FileExplorer") {
     labelPath = nullptr;
     labelStatus = nullptr;
@@ -12,9 +15,11 @@ FileExplorerApp::FileExplorerApp() : BaseApp("FileExplorer") {
     btnBack = nullptr;
     btnUp = nullptr;
     btnSwitch = nullptr;
+    btnSelect = nullptr;
     
     strcpy(currentPath, "/");
     currentStorage = STORAGE_SD;
+    explorerMode = MODE_BROWSE;
     selectedIndex = -1;
     sdCardAvailable = false;
     spiffsAvailable = false;
@@ -30,6 +35,16 @@ bool FileExplorerApp::createUI() {
     
     sdCardAvailable = Storage.isSDReady();
     spiffsAvailable = Storage.isSPIFFSReady();
+    
+    if (selectStartPath[0] != '\0' && selectStartPath[0] != '/') {
+        if (selectStartPath[0] == 'S' && selectStartPath[1] == ':') {
+            currentStorage = STORAGE_SD;
+            strncpy(currentPath, selectStartPath + 2, MAX_PATH_LENGTH - 1);
+        } else if (selectStartPath[0] == 'F' && selectStartPath[1] == ':') {
+            currentStorage = STORAGE_SPIFFS;
+            strncpy(currentPath, selectStartPath + 2, MAX_PATH_LENGTH - 1);
+        }
+    }
     
     if (!sdCardAvailable && !spiffsAvailable) {
         lv_obj_t* labelError = lv_label_create(scr);
@@ -58,8 +73,12 @@ bool FileExplorerApp::createUI() {
         currentStorage = STORAGE_SPIFFS;
     }
     
+    const char* titleText = (explorerMode == MODE_SELECT_FILE) ? 
+                            LV_SYMBOL_FILE " Select File" : 
+                            LV_SYMBOL_DIRECTORY " File Explorer";
+    
     lv_obj_t* title = lv_label_create(scr);
-    lv_label_set_text(title, LV_SYMBOL_DIRECTORY " File Explorer");
+    lv_label_set_text(title, titleText);
     lv_obj_set_style_text_color(title, lv_color_make(0x00, 0xFF, 0x00), 0);
     lv_obj_set_style_text_font(title, &lv_font_montserrat_16, 0);
     lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 5);
@@ -85,16 +104,29 @@ bool FileExplorerApp::createUI() {
     lv_obj_set_style_text_font(labelStatus, &lv_font_montserrat_10, 0);
     lv_obj_align(labelStatus, LV_ALIGN_BOTTOM_LEFT, 10, -45);
     
-    btnSwitch = lv_btn_create(scr);
-    lv_obj_set_size(btnSwitch, 70, 30);
-    lv_obj_align(btnSwitch, LV_ALIGN_BOTTOM_RIGHT, -95, -48);
-    lv_obj_add_event_cb(btnSwitch, switch_btn_cb, LV_EVENT_CLICKED, this);
-    lv_obj_set_style_bg_color(btnSwitch, lv_color_make(0x00, 0x60, 0x40), 0);
-    
-    lv_obj_t* switchLabel = lv_label_create(btnSwitch);
-    lv_label_set_text(switchLabel, "Switch");
-    lv_obj_set_style_text_font(switchLabel, &lv_font_montserrat_10, 0);
-    lv_obj_center(switchLabel);
+    if (explorerMode == MODE_SELECT_FILE) {
+        btnSelect = lv_btn_create(scr);
+        lv_obj_set_size(btnSelect, 70, 30);
+        lv_obj_align(btnSelect, LV_ALIGN_BOTTOM_RIGHT, -95, -48);
+        lv_obj_add_event_cb(btnSelect, select_btn_cb, LV_EVENT_CLICKED, this);
+        lv_obj_set_style_bg_color(btnSelect, lv_color_make(0x00, 0x80, 0x00), 0);
+        
+        lv_obj_t* selectLabel = lv_label_create(btnSelect);
+        lv_label_set_text(selectLabel, "Select");
+        lv_obj_set_style_text_font(selectLabel, &lv_font_montserrat_10, 0);
+        lv_obj_center(selectLabel);
+    } else {
+        btnSwitch = lv_btn_create(scr);
+        lv_obj_set_size(btnSwitch, 70, 30);
+        lv_obj_align(btnSwitch, LV_ALIGN_BOTTOM_RIGHT, -95, -48);
+        lv_obj_add_event_cb(btnSwitch, switch_btn_cb, LV_EVENT_CLICKED, this);
+        lv_obj_set_style_bg_color(btnSwitch, lv_color_make(0x00, 0x60, 0x40), 0);
+        
+        lv_obj_t* switchLabel = lv_label_create(btnSwitch);
+        lv_label_set_text(switchLabel, "Switch");
+        lv_obj_set_style_text_font(switchLabel, &lv_font_montserrat_10, 0);
+        lv_obj_center(switchLabel);
+    }
     
     btnUp = lv_btn_create(scr);
     lv_obj_set_size(btnUp, 70, 30);
@@ -125,6 +157,44 @@ bool FileExplorerApp::createUI() {
 
 void FileExplorerApp::destroyUI() {
     fileList.clear();
+}
+
+void FileExplorerApp::setSelectMode(explorer_mode_t mode, const char* startPath) {
+    explorerMode = mode;
+    if (startPath) {
+        strncpy(selectStartPath, startPath, MAX_PATH_LENGTH - 1);
+        selectStartPath[MAX_PATH_LENGTH - 1] = '\0';
+    } else {
+        selectStartPath[0] = '\0';
+    }
+}
+
+void FileExplorerApp::confirmSelection() {
+    if (selectedIndex < 0 || selectedIndex >= (int)fileList.size()) {
+        return;
+    }
+    
+    file_entry_t& entry = fileList[selectedIndex];
+    if (entry.isDirectory) {
+        return;
+    }
+    
+    char fullPath[MAX_PATH_LENGTH * 2];
+    char driveLetter = (currentStorage == STORAGE_SD) ? 'S' : 'F';
+    
+    if (strcmp(currentPath, "/") == 0) {
+        snprintf(fullPath, sizeof(fullPath), "%c:/%s", driveLetter, entry.name);
+    } else {
+        snprintf(fullPath, sizeof(fullPath), "%c:%s/%s", driveLetter, currentPath, entry.name);
+    }
+    
+    Serial.printf("[FileExplorer] File selected: %s\n", fullPath);
+    
+    if (selectCallback) {
+        selectCallback(fullPath);
+    }
+    
+    AppMgr.switchToApp("Chat");
 }
 
 void FileExplorerApp::refreshFileList() {
@@ -267,12 +337,17 @@ void FileExplorerApp::selectFile(int index) {
         return;
     }
     
+    selectedIndex = index;
     file_entry_t& entry = fileList[index];
     
     if (entry.isDirectory) {
         enterDirectory(entry.name);
     } else {
         Serial.printf("[FileExplorer] Selected file: %s (%d bytes)\n", entry.name, (int)entry.size);
+        
+        if (explorerMode == MODE_SELECT_FILE) {
+            confirmSelection();
+        }
     }
 }
 
@@ -289,7 +364,14 @@ void FileExplorerApp::switchStorage() {
 }
 
 void FileExplorerApp::back_btn_cb(lv_event_t* e) {
-    AppMgr.switchToHome();
+    FileExplorerApp* app = (FileExplorerApp*)lv_event_get_user_data(e);
+    
+    if (app && app->explorerMode == MODE_SELECT_FILE) {
+        app->explorerMode = MODE_BROWSE;
+        AppMgr.switchToApp("Chat");
+    } else {
+        AppMgr.switchToHome();
+    }
 }
 
 void FileExplorerApp::up_btn_cb(lv_event_t* e) {
@@ -300,6 +382,11 @@ void FileExplorerApp::up_btn_cb(lv_event_t* e) {
 void FileExplorerApp::switch_btn_cb(lv_event_t* e) {
     FileExplorerApp* app = (FileExplorerApp*)lv_event_get_user_data(e);
     app->switchStorage();
+}
+
+void FileExplorerApp::select_btn_cb(lv_event_t* e) {
+    FileExplorerApp* app = (FileExplorerApp*)lv_event_get_user_data(e);
+    app->confirmSelection();
 }
 
 void FileExplorerApp::list_click_cb(lv_event_t* e) {
