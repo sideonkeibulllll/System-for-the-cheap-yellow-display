@@ -36,21 +36,22 @@ bool ChatApp::createUI() {
     
     _inputArea = lv_textarea_create(lv_layer_top());
     lv_obj_set_size(_inputArea, 230, 60);
-    lv_obj_set_pos(_inputArea, 5, 260);
+    lv_obj_set_pos(_inputArea, 5, 250);
     lv_textarea_set_max_length(_inputArea, CHAT_INPUT_MAX_LEN);
     lv_textarea_set_placeholder_text(_inputArea, "Input...");
-    lv_obj_set_style_bg_color(_inputArea, lv_color_make(0x50, 0x50, 0x50), 0);
-    lv_obj_set_style_text_color(_inputArea, lv_color_white(), 0);
+    lv_obj_set_style_bg_color(_inputArea, lv_color_make(0xFF, 0xFF, 0xFF), 0);
+    lv_obj_set_style_bg_opa(_inputArea, LV_OPA_COVER, 0);
+    lv_obj_set_style_text_color(_inputArea, lv_color_make(0x00, 0x00, 0x00), 0);
     lv_obj_set_style_border_color(_inputArea, lv_color_make(0x00, 0x80, 0xC0), 0);
-    lv_obj_set_style_border_width(_inputArea, 2, 0);
-    lv_obj_set_style_radius(_inputArea, 4, 0);
+    lv_obj_set_style_border_width(_inputArea, 3, 0);
+    lv_obj_set_style_radius(_inputArea, 8, 0);
     lv_obj_set_style_text_font(_inputArea, &lv_font_montserrat_14, 0);
     lv_textarea_set_one_line(_inputArea, false);
     lv_obj_add_event_cb(_inputArea, input_focus_cb, LV_EVENT_FOCUSED, this);
     lv_obj_add_event_cb(_inputArea, input_defocus_cb, LV_EVENT_DEFOCUSED, this);
     lv_obj_add_flag(_inputArea, LV_OBJ_FLAG_HIDDEN);
     
-    Serial.println("[ChatApp] createUI done, inputArea created");
+    Serial.printf("[ChatApp] createUI done, inputArea=%p, screen size=240x320\n", _inputArea);
     
     return true;
 }
@@ -84,10 +85,11 @@ void ChatApp::showInputPanel() {
     Serial.println("[ChatApp] showInputPanel start");
     if (_inputArea) {
         lv_obj_clear_flag(_inputArea, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_set_pos(_inputArea, 5, 260);
+        lv_obj_set_pos(_inputArea, 5, 250);
         lv_obj_move_foreground(_inputArea);
+        lv_obj_invalidate(_inputArea);
         _inputPanelVisible = true;
-        Serial.printf("[ChatApp] inputArea shown at y=260, hidden flag cleared\n");
+        Serial.printf("[ChatApp] inputArea shown, pos=(5,250), size=230x60, bg=white\n");
     } else {
         Serial.println("[ChatApp] ERROR: _inputArea is null!");
     }
@@ -147,7 +149,7 @@ void ChatApp::input_defocus_cb(lv_event_t* e) {
         app->_keyboard = nullptr;
         
         if (app->_inputArea) {
-            lv_obj_set_pos(app->_inputArea, 5, 260);
+            lv_obj_set_pos(app->_inputArea, 5, 250);
         }
     }
 }

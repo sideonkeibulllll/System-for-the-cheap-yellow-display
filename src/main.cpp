@@ -20,7 +20,9 @@ static TaskHandle_t appTaskHandle = nullptr;
 
 static lv_obj_t* labelHomeStatus;
 static lv_obj_t* labelHomePerf;
+static lv_obj_t* labelTime;
 static lv_timer_t* homeUpdateTimer = nullptr;
+static lv_timer_t* timeUpdateTimer = nullptr;
 
 static void home_update_cb(lv_timer_t* timer) {
     if (labelHomePerf && lv_obj_is_valid(labelHomePerf)) {
@@ -34,6 +36,16 @@ static void home_update_cb(lv_timer_t* timer) {
     }
 }
 
+static void time_update_cb(lv_timer_t* timer) {
+    if (labelTime && lv_obj_is_valid(labelTime)) {
+        struct tm timeinfo;
+        time_t now;
+        time(&now);
+        localtime_r(&now, &timeinfo);
+        lv_label_set_text_fmt(labelTime, "%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
+    }
+}
+
 static void app_btn_cb(lv_event_t* e) {
     const char* appName = (const char*)lv_event_get_user_data(e);
     Serial.printf("[Home] Launching app: %s\n", appName);
@@ -44,8 +56,6 @@ static void app_btn_cb(lv_event_t* e) {
 static void createHomeUI() {
     lv_obj_t* home = AppMgr.getHomeScreen();
     if (!home) return;
-    
-
     
     lv_obj_t* container = lv_obj_create(home);
     lv_obj_set_size(container, BSP_DISPLAY_WIDTH - 20, 120);
@@ -86,9 +96,19 @@ static void createHomeUI() {
         lv_obj_align(nameLabel, LV_ALIGN_BOTTOM_MID, 0, -2);
     }
     
-
+    lv_obj_t* timeContainer = lv_obj_create(home);
+    lv_obj_set_size(timeContainer, BSP_DISPLAY_WIDTH - 20, 55);
+    lv_obj_set_style_bg_color(timeContainer, lv_color_make(0x20, 0x20, 0x20), 0);
+    lv_obj_set_style_border_width(timeContainer, 0, 0);
+    lv_obj_align(timeContainer, LV_ALIGN_TOP_MID, 0, 160);
     
-
+    labelTime = lv_label_create(timeContainer);
+    lv_label_set_text(labelTime, "--:--");
+    lv_obj_set_style_text_color(labelTime, lv_color_make(0x00, 0xFF, 0x00), 0);
+    lv_obj_set_style_text_font(labelTime, &lv_font_montserrat_28, 0);
+    lv_obj_center(labelTime);
+    
+    timeUpdateTimer = lv_timer_create(time_update_cb, 1000, NULL);
     
     lv_obj_t* hint = lv_label_create(home);
     lv_label_set_text(hint, "Tap icon to launch app");
