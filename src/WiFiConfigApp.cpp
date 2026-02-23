@@ -6,6 +6,7 @@
 #include <Preferences.h>
 #include <ArduinoJson.h>
 #include <SD.h>
+#include <time.h>
 
 WiFiConfigApp::WiFiConfigApp() : BaseApp("WiFiConfig") {
     btnBack = nullptr;
@@ -777,6 +778,9 @@ void WiFiConfigApp::onUpdate() {
             
             updateStatus("Connected! IP: " + WiFi.localIP().toString());
             saveWiFiConfig(_selectedSSID, _password);
+            
+            configTzTime("CST-8", "pool.ntp.org", "time.nist.gov");
+            Serial.println("[WiFi] NTP time sync started");
             
             bsp_rgb_led_set(0, 255, 0);
         }

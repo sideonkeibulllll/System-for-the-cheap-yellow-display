@@ -99,12 +99,16 @@ static void createHomeUI() {
     lv_obj_t* timeContainer = lv_obj_create(home);
     lv_obj_set_size(timeContainer, BSP_DISPLAY_WIDTH - 20, 55);
     lv_obj_set_style_bg_color(timeContainer, lv_color_make(0x20, 0x20, 0x20), 0);
-    lv_obj_set_style_border_width(timeContainer, 0, 0);
+    lv_obj_set_style_border_width(timeContainer, 1, 0);
+    lv_obj_set_style_border_color(timeContainer, lv_color_black(), 0);
+    lv_obj_set_style_border_side(timeContainer, LV_BORDER_SIDE_FULL, 0);
+    lv_obj_set_style_border_post(timeContainer, true, 0);
+    lv_obj_set_style_radius(timeContainer, 0, 0);
     lv_obj_align(timeContainer, LV_ALIGN_TOP_MID, 0, 160);
     
     labelTime = lv_label_create(timeContainer);
     lv_label_set_text(labelTime, "--:--");
-    lv_obj_set_style_text_color(labelTime, lv_color_make(0x00, 0xFF, 0x00), 0);
+    lv_obj_set_style_text_color(labelTime, lv_color_black(), 0);
     lv_obj_set_style_text_font(labelTime, &lv_font_montserrat_28, 0);
     lv_obj_center(labelTime);
     
