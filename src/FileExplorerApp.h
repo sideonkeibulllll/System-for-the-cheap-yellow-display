@@ -38,7 +38,6 @@ private:
     
     char currentPath[MAX_PATH_LENGTH];
     storage_type_t currentStorage;
-    explorer_mode_t explorerMode;
     
     std::vector<file_entry_t> fileList;
     int selectedIndex;
@@ -76,10 +75,11 @@ public:
     app_info_t getInfo() const override;
     
     void setSelectMode(explorer_mode_t mode, const char* startPath = nullptr);
-    explorer_mode_t getMode() const { return explorerMode; }
+    static explorer_mode_t getMode() { return _explorerMode; }
     
     static file_select_callback_t selectCallback;
     static char selectStartPath[MAX_PATH_LENGTH];
+    static explorer_mode_t _explorerMode;
 };
 
 BaseApp* createFileExplorerApp();

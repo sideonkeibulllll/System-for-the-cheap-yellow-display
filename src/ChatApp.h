@@ -47,6 +47,7 @@ private:
     
     bool createUI() override;
     void destroyUI() override;
+    bool onResume() override;
     
     void setupSidebarButtons();
     void clearSidebarButtons();
@@ -57,6 +58,11 @@ private:
     bool loadChatFromFile(const char* path);
     void clearMessages();
     void addMessageToList(const char* text, bool isSent);
+    
+    void saveState() override;
+    bool loadState() override;
+    void checkPendingFile();
+    void processPendingFile(const char* path);
     
     static void float_btn_cb(lv_event_t* e);
     static void input_focus_cb(lv_event_t* e);

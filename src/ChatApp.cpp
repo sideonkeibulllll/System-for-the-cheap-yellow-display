@@ -103,8 +103,112 @@ bool ChatApp::createUI() {
     return true;
 }
 
+bool ChatApp::onResume() {
+    Serial.println("[ChatApp] onResume");
+    
+    if (!BaseApp::onResume()) {
+        Serial.println("[ChatApp] BaseApp::onResume failed");
+        return false;
+    }
+    
+    checkPendingFile();
+    
+    return true;
+}
+
+void ChatApp::saveState() {
+    if (!_dataFolderReady) return;
+    
+    File stateFile = SD.open("/ChatApp/.state", FILE_WRITE);
+    if (!stateFile) {
+        Serial.println("[ChatApp] Failed to save state");
+        return;
+    }
+    
+    stateFile.printf("chat_path=%s\n", _currentChatPath);
+    stateFile.printf("input_text=%s\n", _inputArea ? lv_textarea_get_text(_inputArea) : "");
+    
+    stateFile.close();
+    Serial.println("[ChatApp] State saved");
+}
+
+bool ChatApp::loadState() {
+    if (!_sdCardAvailable) return false;
+    
+    if (!SD.exists("/ChatApp/.state")) {
+        Serial.println("[ChatApp] No state file found");
+        return false;
+    }
+    
+    File stateFile = SD.open("/ChatApp/.state");
+    if (!stateFile) {
+        return false;
+    }
+    
+    char chatPath[CHAT_PATH_MAX_LEN] = "";
+    char inputText[CHAT_INPUT_MAX_LEN] = "";
+    
+    while (stateFile.available()) {
+        String line = stateFile.readStringUntil('\n');
+        line.trim();
+        
+        if (line.startsWith("chat_path=")) {
+            strncpy(chatPath, line.c_str() + 10, CHAT_PATH_MAX_LEN - 1);
+        } else if (line.startsWith("input_text=")) {
+            strncpy(inputText, line.c_str() + 11, CHAT_INPUT_MAX_LEN - 1);
+        }
+    }
+    
+    stateFile.close();
+    
+    if (chatPath[0] != '\0' && SD.exists(chatPath)) {
+        loadChatFromFile(chatPath);
+        Serial.printf("[ChatApp] Restored chat: %s\n", chatPath);
+    }
+    
+    if (inputText[0] != '\0' && _inputArea) {
+        lv_textarea_set_text(_inputArea, inputText);
+        Serial.printf("[ChatApp] Restored input: %s\n", inputText);
+    }
+    
+    return true;
+}
+
+void ChatApp::checkPendingFile() {
+    if (!_sdCardAvailable) return;
+    
+    if (!SD.exists("/ChatApp/.pending_file")) {
+        return;
+    }
+    
+    File pendingFile = SD.open("/ChatApp/.pending_file");
+    if (!pendingFile) return;
+    
+    String path = pendingFile.readStringUntil('\n');
+    path.trim();
+    pendingFile.close();
+    
+    SD.remove("/ChatApp/.pending_file");
+    
+    if (path.length() > 0) {
+        processPendingFile(path.c_str());
+    }
+}
+
+void ChatApp::processPendingFile(const char* path) {
+    Serial.printf("[ChatApp] Processing pending file: %s\n", path);
+    
+    if (path[0] == 'S' && path[1] == ':') {
+        loadChatFromFile(path + 2);
+    } else {
+        loadChatFromFile(path);
+    }
+}
+
 void ChatApp::destroyUI() {
     Serial.println("[ChatApp] destroyUI");
+    
+    saveState();
     
     clearSidebarButtons();
     

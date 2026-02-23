@@ -7,6 +7,7 @@
 
 file_select_callback_t FileExplorerApp::selectCallback = nullptr;
 char FileExplorerApp::selectStartPath[MAX_PATH_LENGTH] = "/";
+explorer_mode_t FileExplorerApp::_explorerMode = MODE_BROWSE;
 
 FileExplorerApp::FileExplorerApp() : BaseApp("FileExplorer") {
     labelPath = nullptr;
@@ -19,7 +20,6 @@ FileExplorerApp::FileExplorerApp() : BaseApp("FileExplorer") {
     
     strcpy(currentPath, "/");
     currentStorage = STORAGE_SD;
-    explorerMode = MODE_BROWSE;
     selectedIndex = -1;
     sdCardAvailable = false;
     spiffsAvailable = false;
@@ -73,7 +73,7 @@ bool FileExplorerApp::createUI() {
         currentStorage = STORAGE_SPIFFS;
     }
     
-    const char* titleText = (explorerMode == MODE_SELECT_FILE) ? 
+    const char* titleText = (_explorerMode == MODE_SELECT_FILE) ? 
                             LV_SYMBOL_FILE " Select File" : 
                             LV_SYMBOL_DIRECTORY " File Explorer";
     
@@ -104,7 +104,7 @@ bool FileExplorerApp::createUI() {
     lv_obj_set_style_text_font(labelStatus, &lv_font_montserrat_10, 0);
     lv_obj_align(labelStatus, LV_ALIGN_BOTTOM_LEFT, 10, -45);
     
-    if (explorerMode == MODE_SELECT_FILE) {
+    if (_explorerMode == MODE_SELECT_FILE) {
         btnSelect = lv_btn_create(scr);
         lv_obj_set_size(btnSelect, 70, 30);
         lv_obj_align(btnSelect, LV_ALIGN_BOTTOM_RIGHT, -95, -48);
@@ -160,13 +160,14 @@ void FileExplorerApp::destroyUI() {
 }
 
 void FileExplorerApp::setSelectMode(explorer_mode_t mode, const char* startPath) {
-    explorerMode = mode;
+    _explorerMode = mode;
     if (startPath) {
         strncpy(selectStartPath, startPath, MAX_PATH_LENGTH - 1);
         selectStartPath[MAX_PATH_LENGTH - 1] = '\0';
     } else {
         selectStartPath[0] = '\0';
     }
+    Serial.printf("[FileExplorer] setSelectMode: %d, path: %s\n", mode, selectStartPath);
 }
 
 void FileExplorerApp::confirmSelection() {
@@ -190,10 +191,16 @@ void FileExplorerApp::confirmSelection() {
     
     Serial.printf("[FileExplorer] File selected: %s\n", fullPath);
     
-    if (selectCallback) {
-        selectCallback(fullPath);
+    File pendingFile = SD.open("/ChatApp/.pending_file", FILE_WRITE);
+    if (pendingFile) {
+        pendingFile.printf("%s\n", fullPath);
+        pendingFile.close();
+        Serial.println("[FileExplorer] Written pending file command");
+    } else {
+        Serial.println("[FileExplorer] Failed to write pending file");
     }
     
+    _explorerMode = MODE_BROWSE;
     AppMgr.switchToApp("Chat");
 }
 
@@ -345,7 +352,7 @@ void FileExplorerApp::selectFile(int index) {
     } else {
         Serial.printf("[FileExplorer] Selected file: %s (%d bytes)\n", entry.name, (int)entry.size);
         
-        if (explorerMode == MODE_SELECT_FILE) {
+        if (_explorerMode == MODE_SELECT_FILE) {
             confirmSelection();
         }
     }
@@ -366,8 +373,8 @@ void FileExplorerApp::switchStorage() {
 void FileExplorerApp::back_btn_cb(lv_event_t* e) {
     FileExplorerApp* app = (FileExplorerApp*)lv_event_get_user_data(e);
     
-    if (app && app->explorerMode == MODE_SELECT_FILE) {
-        app->explorerMode = MODE_BROWSE;
+    if (_explorerMode == MODE_SELECT_FILE) {
+        _explorerMode = MODE_BROWSE;
         AppMgr.switchToApp("Chat");
     } else {
         AppMgr.switchToHome();
