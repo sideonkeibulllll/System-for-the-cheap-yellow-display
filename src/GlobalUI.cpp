@@ -7,6 +7,8 @@ lv_obj_t *GlobalUI::sidebar = nullptr;
 lv_obj_t *GlobalUI::toggleBtn = nullptr;
 lv_obj_t *GlobalUI::homeBtn = nullptr;
 bool GlobalUI::sidebarOpen = false;
+lv_obj_t* GlobalUI::customButtons[MAX_SIDEBAR_BUTTONS] = {nullptr};
+int GlobalUI::customButtonCount = 0;
 
 #if LV_USE_PERF_MONITOR || LV_USE_MEM_MONITOR
 #include <lvgl.h>
@@ -58,6 +60,22 @@ void home_btn_cb(lv_event_t *e) {
     }
 }
 
+typedef struct {
+    sidebar_btn_callback_t callback;
+    void* user_data;
+} custom_btn_data_t;
+
+void custom_btn_cb(lv_event_t *e) {
+    lv_event_code_t code = lv_event_get_code(e);
+    if (code == LV_EVENT_CLICKED) {
+        lv_obj_t* btn = lv_event_get_target(e);
+        custom_btn_data_t* data = (custom_btn_data_t*)lv_obj_get_user_data(btn);
+        if (data && data->callback) {
+            data->callback(data->user_data);
+        }
+    }
+}
+
 void toggle_sidebar(lv_event_t *e) {
     lv_event_code_t code = lv_event_get_code(e);
     if (code == LV_EVENT_CLICKED) {
@@ -66,6 +84,11 @@ void toggle_sidebar(lv_event_t *e) {
             lv_label_set_text(lv_obj_get_child(GlobalUI::toggleBtn, 0), LV_SYMBOL_RIGHT);
             if (GlobalUI::homeBtn) {
                 lv_obj_add_flag(GlobalUI::homeBtn, LV_OBJ_FLAG_HIDDEN);
+            }
+            for (int i = 0; i < GlobalUI::customButtonCount; i++) {
+                if (GlobalUI::customButtons[i]) {
+                    lv_obj_add_flag(GlobalUI::customButtons[i], LV_OBJ_FLAG_HIDDEN);
+                }
             }
             #if LV_USE_PERF_MONITOR
             lv_obj_t* perf_label = find_perf_monitor_label();
@@ -84,6 +107,11 @@ void toggle_sidebar(lv_event_t *e) {
             lv_label_set_text(lv_obj_get_child(GlobalUI::toggleBtn, 0), LV_SYMBOL_LEFT);
             if (GlobalUI::homeBtn) {
                 lv_obj_clear_flag(GlobalUI::homeBtn, LV_OBJ_FLAG_HIDDEN);
+            }
+            for (int i = 0; i < GlobalUI::customButtonCount; i++) {
+                if (GlobalUI::customButtons[i]) {
+                    lv_obj_clear_flag(GlobalUI::customButtons[i], LV_OBJ_FLAG_HIDDEN);
+                }
             }
             #if LV_USE_PERF_MONITOR
             lv_obj_t* perf_label = find_perf_monitor_label();
@@ -191,6 +219,8 @@ void GlobalUI::init() {
 }
 
 void GlobalUI::deinit() {
+    clearSidebarButtons();
+    
     if (toggleBtn) {
         lv_obj_del(toggleBtn);
         toggleBtn = nullptr;
@@ -213,6 +243,82 @@ void GlobalUI::toggleSidebar() {
     if (toggleBtn) {
         lv_event_send(toggleBtn, LV_EVENT_CLICKED, NULL);
     }
+}
+
+lv_obj_t* GlobalUI::addSidebarButton(const char* symbol, sidebar_btn_callback_t callback, void* user_data) {
+    if (customButtonCount >= MAX_SIDEBAR_BUTTONS) {
+        return nullptr;
+    }
+    
+    lv_obj_t* btn = lv_btn_create(lv_layer_top());
+    lv_obj_set_size(btn, 50, 30);
+    lv_obj_set_pos(btn, 0, 40 + customButtonCount * 30);
+    lv_obj_set_style_bg_color(btn, lv_color_make(0x80, 0x80, 0x80), 0);
+    lv_obj_set_style_border_width(btn, 0, 0);
+    lv_obj_set_style_radius(btn, 0, 0);
+    
+    lv_obj_t* label = lv_label_create(btn);
+    lv_label_set_text(label, symbol);
+    lv_obj_center(label);
+    lv_obj_set_style_text_color(label, lv_color_white(), 0);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
+    
+    custom_btn_data_t* data = (custom_btn_data_t*)malloc(sizeof(custom_btn_data_t));
+    if (data) {
+        data->callback = callback;
+        data->user_data = user_data;
+        lv_obj_set_user_data(btn, data);
+    }
+    
+    lv_obj_add_event_cb(btn, custom_btn_cb, LV_EVENT_CLICKED, NULL);
+    
+    if (!sidebarOpen) {
+        lv_obj_add_flag(btn, LV_OBJ_FLAG_HIDDEN);
+    }
+    
+    customButtons[customButtonCount++] = btn;
+    
+    Serial.printf("[GlobalUI] Added sidebar button %d at y=%d\n", customButtonCount - 1, 40 + (customButtonCount - 1) * 30);
+    
+    return btn;
+}
+
+void GlobalUI::removeSidebarButton(lv_obj_t* btn) {
+    if (!btn) return;
+    
+    custom_btn_data_t* data = (custom_btn_data_t*)lv_obj_get_user_data(btn);
+    if (data) {
+        free(data);
+    }
+    
+    for (int i = 0; i < customButtonCount; i++) {
+        if (customButtons[i] == btn) {
+            lv_obj_del(btn);
+            for (int j = i; j < customButtonCount - 1; j++) {
+                customButtons[j] = customButtons[j + 1];
+                if (customButtons[j]) {
+                    lv_obj_set_pos(customButtons[j], 0, 40 + j * 30);
+                }
+            }
+            customButtons[customButtonCount - 1] = nullptr;
+            customButtonCount--;
+            break;
+        }
+    }
+}
+
+void GlobalUI::clearSidebarButtons() {
+    for (int i = 0; i < customButtonCount; i++) {
+        if (customButtons[i]) {
+            custom_btn_data_t* data = (custom_btn_data_t*)lv_obj_get_user_data(customButtons[i]);
+            if (data) {
+                free(data);
+            }
+            lv_obj_del(customButtons[i]);
+            customButtons[i] = nullptr;
+        }
+    }
+    customButtonCount = 0;
 }
 
 GlobalUI GlobalUI::instance;

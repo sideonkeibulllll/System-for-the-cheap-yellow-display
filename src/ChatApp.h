@@ -3,6 +3,7 @@
 
 #include "AppManager.h"
 #include "ZiranmaMapping.h"
+#include "GlobalUI.h"
 
 #define CHAT_INPUT_MAX_LEN      512
 #define CHAT_DP_BUFFER_SIZE     64
@@ -24,7 +25,6 @@ private:
     lv_obj_t* _modeBtn;
     lv_obj_t* _msgContainer;
     
-    lv_obj_t* _sidebar;
     lv_obj_t* _btnOpenChat;
     lv_obj_t* _btnNewChat;
     lv_obj_t* _btnPlaceholder;
@@ -48,12 +48,12 @@ private:
     bool createUI() override;
     void destroyUI() override;
     
-    void createSidebar();
-    void destroySidebar();
+    void setupSidebarButtons();
+    void clearSidebarButtons();
     
     bool initDataFolder();
     int getNextChatIndex();
-    void saveChatToFile();
+    void appendMessageToFile(const char* text, bool isSent);
     bool loadChatFromFile(const char* path);
     void clearMessages();
     void addMessageToList(const char* text, bool isSent);
@@ -80,8 +80,6 @@ private:
     void addMessage(const char* text, bool isSent);
     void sendMessage();
     
-    void onOpenChat();
-    void onNewChat();
     void refreshMessageDisplay();
     
 public:
@@ -92,6 +90,8 @@ public:
     app_info_t getInfo() const override;
     
     void onFileSelected(const char* path);
+    void onOpenChat();
+    void onNewChat();
 };
 
 BaseApp* createChatApp();

@@ -3,6 +3,16 @@
 #include "FileExplorerApp.h"
 #include <SD.h>
 
+static void onOpenChatCallback(void* user_data) {
+    ChatApp* app = (ChatApp*)user_data;
+    if (app) app->onOpenChat();
+}
+
+static void onNewChatCallback(void* user_data) {
+    ChatApp* app = (ChatApp*)user_data;
+    if (app) app->onNewChat();
+}
+
 ChatApp::ChatApp() : BaseApp("Chat") {
     _blankScreen = nullptr;
     _floatBtn = nullptr;
@@ -10,7 +20,6 @@ ChatApp::ChatApp() : BaseApp("Chat") {
     _keyboard = nullptr;
     _modeBtn = nullptr;
     _msgContainer = nullptr;
-    _sidebar = nullptr;
     _btnOpenChat = nullptr;
     _btnNewChat = nullptr;
     _btnPlaceholder = nullptr;
@@ -56,7 +65,7 @@ bool ChatApp::createUI() {
     lv_obj_set_flex_flow(_msgContainer, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(_msgContainer, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
     
-    createSidebar();
+    setupSidebarButtons();
     
     _floatBtn = lv_btn_create(_screen);
     lv_obj_set_size(_floatBtn, 40, 40);
@@ -97,11 +106,7 @@ bool ChatApp::createUI() {
 void ChatApp::destroyUI() {
     Serial.println("[ChatApp] destroyUI");
     
-    if (_dataFolderReady && _msgCount > 0) {
-        saveChatToFile();
-    }
-    
-    destroySidebar();
+    clearSidebarButtons();
     
     if (_keyboard) {
         lv_obj_del(_keyboard);
@@ -120,66 +125,28 @@ void ChatApp::destroyUI() {
     _msgContainer = nullptr;
 }
 
-void ChatApp::createSidebar() {
-    if (_sidebar) return;
+void ChatApp::setupSidebarButtons() {
+    GlobalUI& ui = GlobalUI::getInstance();
     
-    _sidebar = lv_obj_create(_screen);
-    lv_obj_set_size(_sidebar, 50, 140);
-    lv_obj_align(_sidebar, LV_ALIGN_LEFT_MID, 5, 0);
-    lv_obj_set_style_bg_color(_sidebar, lv_color_make(0x30, 0x30, 0x30), 0);
-    lv_obj_set_style_bg_opa(_sidebar, LV_OPA_90, 0);
-    lv_obj_set_style_border_width(_sidebar, 1, 0);
-    lv_obj_set_style_border_color(_sidebar, lv_color_make(0x50, 0x50, 0x50), 0);
-    lv_obj_set_style_radius(_sidebar, 8, 0);
-    lv_obj_set_style_pad_all(_sidebar, 5, 0);
-    lv_obj_set_flex_flow(_sidebar, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(_sidebar, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_move_background(_sidebar);
+    _btnOpenChat = ui.addSidebarButton(LV_SYMBOL_LIST, onOpenChatCallback, this);
+    _btnNewChat = ui.addSidebarButton(LV_SYMBOL_EDIT, onNewChatCallback, this);
+    _btnPlaceholder = ui.addSidebarButton("-", nullptr, nullptr);
     
-    _btnOpenChat = lv_btn_create(_sidebar);
-    lv_obj_set_size(_btnOpenChat, 40, 40);
-    lv_obj_set_style_bg_color(_btnOpenChat, lv_color_make(0x00, 0x80, 0x40), 0);
-    lv_obj_set_style_radius(_btnOpenChat, 8, 0);
-    lv_obj_add_event_cb(_btnOpenChat, sidebar_btn_cb, LV_EVENT_CLICKED, this);
-    
-    lv_obj_t* labelOpen = lv_label_create(_btnOpenChat);
-    lv_label_set_text(labelOpen, LV_SYMBOL_LIST);
-    lv_obj_set_style_text_color(labelOpen, lv_color_white(), 0);
-    lv_obj_center(labelOpen);
-    
-    _btnNewChat = lv_btn_create(_sidebar);
-    lv_obj_set_size(_btnNewChat, 40, 40);
-    lv_obj_set_style_bg_color(_btnNewChat, lv_color_make(0x40, 0x80, 0x00), 0);
-    lv_obj_set_style_radius(_btnNewChat, 8, 0);
-    lv_obj_add_event_cb(_btnNewChat, sidebar_btn_cb, LV_EVENT_CLICKED, this);
-    
-    lv_obj_t* labelNew = lv_label_create(_btnNewChat);
-    lv_label_set_text(labelNew, LV_SYMBOL_EDIT);
-    lv_obj_set_style_text_color(labelNew, lv_color_white(), 0);
-    lv_obj_center(labelNew);
-    
-    _btnPlaceholder = lv_btn_create(_sidebar);
-    lv_obj_set_size(_btnPlaceholder, 40, 40);
-    lv_obj_set_style_bg_color(_btnPlaceholder, lv_color_make(0x50, 0x50, 0x50), 0);
-    lv_obj_set_style_radius(_btnPlaceholder, 8, 0);
-    lv_obj_add_flag(_btnPlaceholder, LV_OBJ_FLAG_CLICKABLE);
-    
-    lv_obj_t* labelPlaceholder = lv_label_create(_btnPlaceholder);
-    lv_label_set_text(labelPlaceholder, "-");
-    lv_obj_set_style_text_color(labelPlaceholder, lv_color_make(0x80, 0x80, 0x80), 0);
-    lv_obj_center(labelPlaceholder);
-    
-    Serial.println("[ChatApp] Sidebar created");
+    Serial.println("[ChatApp] Sidebar buttons added");
 }
 
-void ChatApp::destroySidebar() {
-    if (_sidebar) {
-        lv_obj_del(_sidebar);
-        _sidebar = nullptr;
-        _btnOpenChat = nullptr;
-        _btnNewChat = nullptr;
-        _btnPlaceholder = nullptr;
-    }
+void ChatApp::clearSidebarButtons() {
+    GlobalUI& ui = GlobalUI::getInstance();
+    
+    ui.removeSidebarButton(_btnOpenChat);
+    ui.removeSidebarButton(_btnNewChat);
+    ui.removeSidebarButton(_btnPlaceholder);
+    
+    _btnOpenChat = nullptr;
+    _btnNewChat = nullptr;
+    _btnPlaceholder = nullptr;
+    
+    Serial.println("[ChatApp] Sidebar buttons cleared");
 }
 
 bool ChatApp::initDataFolder() {
@@ -277,35 +244,24 @@ void ChatApp::addMessageToList(const char* text, bool isSent) {
     _msgCount++;
 }
 
-void ChatApp::saveChatToFile() {
-    if (!_dataFolderReady || _msgCount == 0) return;
-    
-    const char* savePath;
-    char defaultPath[CHAT_PATH_MAX_LEN];
+void ChatApp::appendMessageToFile(const char* text, bool isSent) {
+    if (!_dataFolderReady || !text) return;
     
     if (_currentChatPath[0] == '\0') {
-        snprintf(defaultPath, sizeof(defaultPath), "/ChatApp/chats/%d.txt", _nextChatIndex++);
-        savePath = defaultPath;
-        strncpy(_currentChatPath, defaultPath, CHAT_PATH_MAX_LEN - 1);
-    } else {
-        savePath = _currentChatPath;
+        snprintf(_currentChatPath, sizeof(_currentChatPath), "/ChatApp/chats/%d.txt", _nextChatIndex++);
     }
     
-    File file = SD.open(savePath, FILE_WRITE);
+    File file = SD.open(_currentChatPath, FILE_APPEND);
     if (!file) {
-        Serial.printf("[ChatApp] Failed to open file for writing: %s\n", savePath);
+        Serial.printf("[ChatApp] Failed to open file for appending: %s\n", _currentChatPath);
         return;
     }
     
-    ChatMessage* msg = _msgHead;
-    while (msg) {
-        const char* role = msg->isSent ? "user" : "order";
-        file.printf("[%s] %s\n", role, msg->text);
-        msg = msg->next;
-    }
-    
+    const char* role = isSent ? "user" : "order";
+    file.printf("[%s] %s\n", role, text);
     file.close();
-    Serial.printf("[ChatApp] Saved %d messages to %s\n", _msgCount, savePath);
+    
+    Serial.printf("[ChatApp] Appended message to %s\n", _currentChatPath);
 }
 
 bool ChatApp::loadChatFromFile(const char* path) {
@@ -432,6 +388,10 @@ void ChatApp::addMessage(const char* text, bool isSent) {
         lv_obj_set_style_pad_right(bubble, 20, 0);
     }
     
+    if (_dataFolderReady) {
+        appendMessageToFile(text, isSent);
+    }
+    
     Serial.printf("[ChatApp] Add message: '%s' (sent=%d)\n", text, isSent);
 }
 
@@ -442,10 +402,6 @@ void ChatApp::sendMessage() {
     if (text && strlen(text) > 0) {
         addMessage(text, true);
         lv_textarea_set_text(_inputArea, "");
-        
-        if (_dataFolderReady) {
-            saveChatToFile();
-        }
     }
 }
 
@@ -458,21 +414,29 @@ void ChatApp::onOpenChat() {
     }
     
     FileExplorerApp::selectCallback = [](const char* path) {
+        Serial.printf("[ChatApp] File selected callback: %s\n", path);
         ChatApp* chatApp = (ChatApp*)AppMgr.findApp("Chat");
         if (chatApp) {
             chatApp->onFileSelected(path);
+        } else {
+            Serial.println("[ChatApp] ChatApp not found in callback");
         }
     };
     
     FileExplorerApp::selectStartPath[0] = '\0';
     
-    BaseApp* filesApp = AppMgr.findApp("Files");
+    Serial.println("[ChatApp] Looking for FileExplorer app...");
+    BaseApp* filesApp = AppMgr.findApp("FileExplorer");
     if (filesApp) {
         FileExplorerApp* fileExplorer = (FileExplorerApp*)filesApp;
         fileExplorer->setSelectMode(MODE_SELECT_FILE, "S:/ChatApp/chats");
+        Serial.println("[ChatApp] FileExplorer found, set select mode");
+    } else {
+        Serial.println("[ChatApp] FileExplorer not found in active/paused apps");
     }
     
-    AppMgr.switchToApp("Files");
+    Serial.println("[ChatApp] Switching to FileExplorer...");
+    AppMgr.switchToApp("FileExplorer");
 }
 
 void ChatApp::onNewChat() {
@@ -757,19 +721,6 @@ void ChatApp::keyboard_event_cb(lv_event_t* e) {
     }
     else if (code == LV_EVENT_READY) {
         Serial.println("[ChatApp] LV_EVENT_READY - OK button clicked");
-    }
-}
-
-void ChatApp::sidebar_btn_cb(lv_event_t* e) {
-    ChatApp* app = (ChatApp*)lv_event_get_user_data(e);
-    lv_obj_t* btn = (lv_obj_t*)lv_event_get_target(e);
-    
-    if (!app || !btn) return;
-    
-    if (btn == app->_btnOpenChat) {
-        app->onOpenChat();
-    } else if (btn == app->_btnNewChat) {
-        app->onNewChat();
     }
 }
 
