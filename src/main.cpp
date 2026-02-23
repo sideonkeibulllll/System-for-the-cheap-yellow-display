@@ -12,6 +12,7 @@
 #include "SettingsApp.h"
 #include "DemoApp.h"
 #include "WiFiConfigApp.h"
+#include "FileExplorerApp.h"
 #include "ChatApp.h"
 #include "GlobalUI.h"
 
@@ -166,6 +167,13 @@ void setup() {
     wifiInfo.type = APP_TYPE_SYSTEM;
     wifiInfo.enabled = true;
     AppMgr.registerApp("WiFiConfig", createWiFiConfigApp, &wifiInfo);
+    
+    app_info_t fileInfo;
+    strncpy(fileInfo.name, "Files", APP_NAME_MAX_LEN - 1);
+    strcpy(fileInfo.icon, LV_SYMBOL_DIRECTORY);
+    fileInfo.type = APP_TYPE_SYSTEM;
+    fileInfo.enabled = true;
+    AppMgr.registerApp("FileExplorer", createFileExplorerApp, &fileInfo);
     
     app_info_t chatInfo;
     strncpy(chatInfo.name, "Chat", APP_NAME_MAX_LEN - 1);

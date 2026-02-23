@@ -1,23 +1,21 @@
 #include "GlobalUI.h"
+#include "AppManager.h"
 #include <lvgl.h>
 #include "BSP.h"
 
 lv_obj_t *GlobalUI::sidebar = nullptr;
 lv_obj_t *GlobalUI::toggleBtn = nullptr;
+lv_obj_t *GlobalUI::homeBtn = nullptr;
 bool GlobalUI::sidebarOpen = false;
 
-// Performance monitor control
 #if LV_USE_PERF_MONITOR || LV_USE_MEM_MONITOR
 #include <lvgl.h>
 
-// Find performance monitor label by searching all objects on lv_layer_sys()
 static lv_obj_t* find_perf_monitor_label() {
     lv_obj_t* layer = lv_layer_sys();
     lv_obj_t* child = lv_obj_get_child(layer, 0);
     while (child) {
-        // Check if this is the performance monitor label
         if (lv_obj_get_class(child) == &lv_label_class) {
-            // Check for performance monitor style
             lv_color_t bg_color = lv_obj_get_style_bg_color(child, 0);
             if (LV_COLOR_GET_R(bg_color) == 0 && LV_COLOR_GET_G(bg_color) == 0 && LV_COLOR_GET_B(bg_color) == 0) {
                 lv_opa_t bg_opa = lv_obj_get_style_bg_opa(child, 0);
@@ -31,19 +29,15 @@ static lv_obj_t* find_perf_monitor_label() {
     return NULL;
 }
 
-// Find memory monitor label by searching all objects on lv_layer_sys()
 static lv_obj_t* find_memory_monitor_label() {
     lv_obj_t* layer = lv_layer_sys();
     lv_obj_t* child = lv_obj_get_child(layer, 0);
     while (child) {
-        // Check if this is the memory monitor label
         if (lv_obj_get_class(child) == &lv_label_class) {
-            // Check for memory monitor style (same as performance monitor)
             lv_color_t bg_color = lv_obj_get_style_bg_color(child, 0);
             if (LV_COLOR_GET_R(bg_color) == 0 && LV_COLOR_GET_G(bg_color) == 0 && LV_COLOR_GET_B(bg_color) == 0) {
                 lv_opa_t bg_opa = lv_obj_get_style_bg_opa(child, 0);
                 if (bg_opa == LV_OPA_50) {
-                    // Memory monitor is typically positioned at bottom-left
                     lv_align_t align = lv_obj_get_style_align(child, 0);
                     if (align == LV_ALIGN_BOTTOM_LEFT) {
                         return child;
@@ -57,12 +51,22 @@ static lv_obj_t* find_memory_monitor_label() {
 }
 #endif
 
+void home_btn_cb(lv_event_t *e) {
+    lv_event_code_t code = lv_event_get_code(e);
+    if (code == LV_EVENT_CLICKED) {
+        AppMgr.switchToHome();
+    }
+}
+
 void toggle_sidebar(lv_event_t *e) {
     lv_event_code_t code = lv_event_get_code(e);
     if (code == LV_EVENT_CLICKED) {
         if (GlobalUI::sidebarOpen) {
             lv_obj_set_pos(GlobalUI::sidebar, -50, 20);
             lv_label_set_text(lv_obj_get_child(GlobalUI::toggleBtn, 0), LV_SYMBOL_RIGHT);
+            if (GlobalUI::homeBtn) {
+                lv_obj_add_flag(GlobalUI::homeBtn, LV_OBJ_FLAG_HIDDEN);
+            }
             #if LV_USE_PERF_MONITOR
             lv_obj_t* perf_label = find_perf_monitor_label();
             if (perf_label) {
@@ -78,6 +82,9 @@ void toggle_sidebar(lv_event_t *e) {
         } else {
             lv_obj_set_pos(GlobalUI::sidebar, 0, 20);
             lv_label_set_text(lv_obj_get_child(GlobalUI::toggleBtn, 0), LV_SYMBOL_LEFT);
+            if (GlobalUI::homeBtn) {
+                lv_obj_clear_flag(GlobalUI::homeBtn, LV_OBJ_FLAG_HIDDEN);
+            }
             #if LV_USE_PERF_MONITOR
             lv_obj_t* perf_label = find_perf_monitor_label();
             if (perf_label) {
@@ -96,7 +103,6 @@ void toggle_sidebar(lv_event_t *e) {
 }
 
 void GlobalUI::init() {
-    // Create toggle button
     if (!toggleBtn) {
         toggleBtn = lv_btn_create(lv_layer_top());
         lv_obj_set_size(toggleBtn, 50, 20);
@@ -106,7 +112,6 @@ void GlobalUI::init() {
         lv_obj_set_style_border_width(toggleBtn, 0, 0);
         lv_obj_set_style_radius(toggleBtn, 0, 0);
 
-        // Add arrow label
         lv_obj_t *arrow = lv_label_create(toggleBtn);
         lv_label_set_text(arrow, sidebarOpen ? LV_SYMBOL_LEFT : LV_SYMBOL_RIGHT);
         lv_obj_center(arrow);
@@ -114,7 +119,6 @@ void GlobalUI::init() {
         lv_obj_set_style_text_font(arrow, &lv_font_montserrat_14, 0);
     }
 
-    // Create sidebar
     if (!sidebar) {
         sidebar = lv_obj_create(lv_layer_top());
         lv_obj_set_size(sidebar, 50, lv_disp_get_ver_res(lv_disp_get_default()) - 20);
@@ -127,7 +131,8 @@ void GlobalUI::init() {
         lv_obj_set_style_shadow_ofs_x(sidebar, 2, 0);
         lv_obj_set_style_shadow_ofs_y(sidebar, 0, 0);
         lv_obj_set_style_shadow_opa(sidebar, 100, 0);
-        // Initialize performance monitor visibility
+        lv_obj_set_style_pad_all(sidebar, 0, 0);
+        
         #if LV_USE_PERF_MONITOR
         lv_obj_t* perf_label = find_perf_monitor_label();
         if (perf_label) {
@@ -139,7 +144,6 @@ void GlobalUI::init() {
         }
         #endif
         
-        // Initialize memory monitor visibility
         #if LV_USE_MEM_MONITOR
         lv_obj_t* mem_label = find_memory_monitor_label();
         if (mem_label) {
@@ -151,11 +155,29 @@ void GlobalUI::init() {
         }
         #endif
     } else {
-        // Update sidebar position
         lv_obj_set_pos(sidebar, sidebarOpen ? 0 : -50, 20);
     }
 
-    // Add transition for smooth sliding
+    if (!homeBtn) {
+        homeBtn = lv_btn_create(lv_layer_top());
+        lv_obj_set_size(homeBtn, 50, 20);
+        lv_obj_set_pos(homeBtn, 0, 20);
+        lv_obj_add_event_cb(homeBtn, home_btn_cb, LV_EVENT_CLICKED, NULL);
+        lv_obj_set_style_bg_color(homeBtn, lv_color_make(0x80, 0x80, 0x80), 0);
+        lv_obj_set_style_border_width(homeBtn, 0, 0);
+        lv_obj_set_style_radius(homeBtn, 0, 0);
+        
+        lv_obj_t *homeLabel = lv_label_create(homeBtn);
+        lv_label_set_text(homeLabel, LV_SYMBOL_HOME);
+        lv_obj_center(homeLabel);
+        lv_obj_set_style_text_color(homeLabel, lv_color_white(), 0);
+        lv_obj_set_style_text_font(homeLabel, &lv_font_montserrat_14, 0);
+        
+        if (!sidebarOpen) {
+            lv_obj_add_flag(homeBtn, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+
     static const lv_style_prop_t props[] = {
         LV_STYLE_TRANSLATE_X,
         LV_STYLE_TRANSLATE_Y,
@@ -172,6 +194,10 @@ void GlobalUI::deinit() {
     if (toggleBtn) {
         lv_obj_del(toggleBtn);
         toggleBtn = nullptr;
+    }
+    if (homeBtn) {
+        lv_obj_del(homeBtn);
+        homeBtn = nullptr;
     }
     if (sidebar) {
         lv_obj_del(sidebar);

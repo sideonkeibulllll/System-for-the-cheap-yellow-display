@@ -1,13 +1,17 @@
 #include "WiFiConfigApp.h"
 #include "BSP.h"
 #include "PowerManager.h"
+#include "Storage.h"
 #include <qrcode.h>
 #include <Preferences.h>
+#include <ArduinoJson.h>
+#include <SD.h>
 
 WiFiConfigApp::WiFiConfigApp() : BaseApp("WiFiConfig") {
     btnBack = nullptr;
     btnScan = nullptr;
     btnAPMode = nullptr;
+    btnLastConnect = nullptr;
     labelStatus = nullptr;
     listNetworks = nullptr;
     keyboard = nullptr;
@@ -27,6 +31,11 @@ WiFiConfigApp::WiFiConfigApp() : BaseApp("WiFiConfig") {
     _lastUpdateMs = 0;
     _connecting = false;
     _connectAttempts = 0;
+    
+    _lastSSID[0] = '\0';
+    _lastPassword[0] = '\0';
+    _lastConfigValid = false;
+    _lastConnectStartMs = 0;
 }
 
 WiFiConfigApp::~WiFiConfigApp() {
@@ -39,6 +48,8 @@ WiFiConfigApp::~WiFiConfigApp() {
 bool WiFiConfigApp::createUI() {
     lv_obj_t* scr = getScreen();
     
+    loadWiFiConfigFromSD();
+    
     lv_obj_t* title = lv_label_create(scr);
     lv_label_set_text(title, LV_SYMBOL_WIFI " WiFi Config");
     lv_obj_set_style_text_color(title, lv_color_make(0x00, 0xFF, 0x00), 0);
@@ -46,7 +57,6 @@ bool WiFiConfigApp::createUI() {
     lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 5);
     
     labelStatus = lv_label_create(scr);
-    // 检查当前WiFi连接状态
     if (WiFi.status() == WL_CONNECTED) {
         lv_label_set_text_fmt(labelStatus, "Connected: %s", WiFi.localIP().toString().c_str());
         lv_obj_set_style_text_color(labelStatus, lv_color_make(0x00, 0xFF, 0x00), 0);
@@ -58,28 +68,39 @@ bool WiFiConfigApp::createUI() {
     lv_obj_align(labelStatus, LV_ALIGN_TOP_MID, 0, 30);
     
     btnScan = lv_btn_create(scr);
-    lv_obj_set_size(btnScan, 120, 35);
+    lv_obj_set_size(btnScan, 100, 30);
     lv_obj_align(btnScan, LV_ALIGN_TOP_LEFT, 10, 55);
     lv_obj_add_event_cb(btnScan, btn_scan_cb, LV_EVENT_CLICKED, this);
     lv_obj_set_style_bg_color(btnScan, lv_color_make(0x00, 0x60, 0x80), 0);
     lv_obj_t* labelScan = lv_label_create(btnScan);
     lv_label_set_text(labelScan, LV_SYMBOL_REFRESH " Scan");
-    lv_obj_set_style_text_font(labelScan, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_font(labelScan, &lv_font_montserrat_12, 0);
     lv_obj_center(labelScan);
     
+    btnLastConnect = lv_btn_create(scr);
+    lv_obj_set_size(btnLastConnect, 100, 30);
+    lv_obj_align(btnLastConnect, LV_ALIGN_TOP_MID, 0, 55);
+    lv_obj_add_event_cb(btnLastConnect, btn_last_connect_cb, LV_EVENT_CLICKED, this);
+    lv_obj_set_style_bg_color(btnLastConnect, lv_color_make(0x00, 0x80, 0x00), 0);
+    lv_obj_t* labelLast = lv_label_create(btnLastConnect);
+    lv_label_set_text(labelLast, LV_SYMBOL_LOOP " Last");
+    lv_obj_set_style_text_font(labelLast, &lv_font_montserrat_12, 0);
+    lv_obj_center(labelLast);
+    updateLastConnectButton();
+    
     btnAPMode = lv_btn_create(scr);
-    lv_obj_set_size(btnAPMode, 120, 35);
+    lv_obj_set_size(btnAPMode, 100, 30);
     lv_obj_align(btnAPMode, LV_ALIGN_TOP_RIGHT, -10, 55);
     lv_obj_add_event_cb(btnAPMode, btn_ap_mode_cb, LV_EVENT_CLICKED, this);
     lv_obj_set_style_bg_color(btnAPMode, lv_color_make(0x80, 0x40, 0x00), 0);
     lv_obj_t* labelAP = lv_label_create(btnAPMode);
-    lv_label_set_text(labelAP, LV_SYMBOL_KEYBOARD " QR Mode");
-    lv_obj_set_style_text_font(labelAP, &lv_font_montserrat_14, 0);
+    lv_label_set_text(labelAP, LV_SYMBOL_KEYBOARD " QR");
+    lv_obj_set_style_text_font(labelAP, &lv_font_montserrat_12, 0);
     lv_obj_center(labelAP);
     
     listNetworks = lv_list_create(scr);
     lv_obj_set_size(listNetworks, BSP_DISPLAY_WIDTH - 20, 110);
-    lv_obj_align(listNetworks, LV_ALIGN_TOP_MID, 0, 100);
+    lv_obj_align(listNetworks, LV_ALIGN_TOP_MID, 0, 95);
     lv_obj_set_style_bg_color(listNetworks, lv_color_make(0x20, 0x20, 0x20), 0);
     
     btnBack = lv_btn_create(scr);
@@ -134,6 +155,11 @@ void WiFiConfigApp::btn_scan_cb(lv_event_t* e) {
 void WiFiConfigApp::btn_ap_mode_cb(lv_event_t* e) {
     WiFiConfigApp* app = (WiFiConfigApp*)lv_event_get_user_data(e);
     app->startAPMode();
+}
+
+void WiFiConfigApp::btn_last_connect_cb(lv_event_t* e) {
+    WiFiConfigApp* app = (WiFiConfigApp*)lv_event_get_user_data(e);
+    app->startLastConnect();
 }
 
 void WiFiConfigApp::btn_back_cb(lv_event_t* e) {
@@ -212,11 +238,11 @@ void WiFiConfigApp::startScan() {
     Serial.printf("[WiFi] Free heap: %u\n", ESP.getFreeHeap());
     
     // 使用异步扫描
-    int n = WiFi.scanNetworks(false, true, false, 15000);
+    int n = WiFi.scanNetworks(false, true, false, WIFI_SCAN_TIMEOUT_MS);
     
     // 等待扫描完成
     unsigned long start = millis();
-    while (WiFi.scanComplete() == WIFI_SCAN_RUNNING && millis() - start < 20000) {
+    while (WiFi.scanComplete() == WIFI_SCAN_RUNNING && millis() - start < WIFI_SCAN_TIMEOUT_MS) {
         delay(100);
     }
     
@@ -428,6 +454,7 @@ void WiFiConfigApp::startConnect(const char* ssid, const char* password) {
     _mode = WIFI_MODE_CONNECTING;
     _connecting = true;
     _connectAttempts = 0;
+    _lastConnectStartMs = millis();
     
     WiFi.mode(WIFI_STA);
     WiFi.begin(ssid, password);
@@ -590,6 +617,132 @@ void WiFiConfigApp::saveWiFiConfig(const char* ssid, const char* password) {
     prefs.putString("ssid", ssid);
     prefs.putString("pass", password);
     prefs.end();
+    
+    if (Storage.isSDReady()) {
+        saveWiFiConfigToSD(ssid, password);
+    }
+}
+
+bool WiFiConfigApp::saveWiFiConfigToSD(const char* ssid, const char* password) {
+    if (!Storage.isSDReady()) {
+        Serial.println("[WiFi] SD not ready, cannot save config");
+        return false;
+    }
+    
+    JsonDocument doc;
+    doc["ssid"] = ssid;
+    doc["password"] = password;
+    
+    File file = SD.open(WIFI_CONFIG_FILE, FILE_WRITE);
+    if (!file) {
+        Serial.println("[WiFi] Failed to open config file for writing");
+        return false;
+    }
+    
+    serializeJson(doc, file);
+    file.close();
+    
+    Serial.printf("[WiFi] Saved config to SD: %s\n", ssid);
+    
+    strncpy(_lastSSID, ssid, WIFI_MAX_SSID_LEN - 1);
+    _lastSSID[WIFI_MAX_SSID_LEN - 1] = '\0';
+    strncpy(_lastPassword, password, WIFI_MAX_PASS_LEN - 1);
+    _lastPassword[WIFI_MAX_PASS_LEN - 1] = '\0';
+    _lastConfigValid = true;
+    
+    updateLastConnectButton();
+    
+    return true;
+}
+
+bool WiFiConfigApp::loadWiFiConfigFromSD() {
+    if (!Storage.isSDReady()) {
+        Serial.println("[WiFi] SD not ready, cannot load config");
+        _lastConfigValid = false;
+        return false;
+    }
+    
+    if (!SD.exists(WIFI_CONFIG_FILE)) {
+        Serial.println("[WiFi] No config file found on SD");
+        _lastConfigValid = false;
+        return false;
+    }
+    
+    File file = SD.open(WIFI_CONFIG_FILE, FILE_READ);
+    if (!file) {
+        Serial.println("[WiFi] Failed to open config file for reading");
+        _lastConfigValid = false;
+        return false;
+    }
+    
+    JsonDocument doc;
+    DeserializationError error = deserializeJson(doc, file);
+    file.close();
+    
+    if (error) {
+        Serial.printf("[WiFi] JSON parse error: %s\n", error.c_str());
+        _lastConfigValid = false;
+        return false;
+    }
+    
+    const char* ssid = doc["ssid"];
+    const char* pass = doc["password"];
+    
+    if (ssid && strlen(ssid) > 0) {
+        strncpy(_lastSSID, ssid, WIFI_MAX_SSID_LEN - 1);
+        _lastSSID[WIFI_MAX_SSID_LEN - 1] = '\0';
+        if (pass) {
+            strncpy(_lastPassword, pass, WIFI_MAX_PASS_LEN - 1);
+            _lastPassword[WIFI_MAX_PASS_LEN - 1] = '\0';
+        } else {
+            _lastPassword[0] = '\0';
+        }
+        _lastConfigValid = true;
+        Serial.printf("[WiFi] Loaded config from SD: %s\n", _lastSSID);
+        return true;
+    }
+    
+    _lastConfigValid = false;
+    return false;
+}
+
+bool WiFiConfigApp::hasLastConfig() {
+    return _lastConfigValid && strlen(_lastSSID) > 0;
+}
+
+void WiFiConfigApp::startLastConnect() {
+    if (!hasLastConfig()) {
+        updateStatus("No saved config!");
+        return;
+    }
+    
+    updateStatus("Connecting to last...");
+    _mode = WIFI_MODE_CONNECTING;
+    _connecting = true;
+    _connectAttempts = 0;
+    _lastConnectStartMs = millis();
+    
+    strncpy(_selectedSSID, _lastSSID, WIFI_MAX_SSID_LEN - 1);
+    _selectedSSID[WIFI_MAX_SSID_LEN - 1] = '\0';
+    strncpy(_password, _lastPassword, WIFI_MAX_PASS_LEN - 1);
+    _password[WIFI_MAX_PASS_LEN - 1] = '\0';
+    
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(_lastSSID, _lastPassword);
+    
+    Serial.printf("[WiFi] Connecting to last: %s\n", _lastSSID);
+}
+
+void WiFiConfigApp::updateLastConnectButton() {
+    if (!btnLastConnect) return;
+    
+    if (hasLastConfig()) {
+        lv_obj_clear_state(btnLastConnect, LV_STATE_DISABLED);
+        lv_obj_set_style_bg_color(btnLastConnect, lv_color_make(0x00, 0x80, 0x00), 0);
+    } else {
+        lv_obj_add_state(btnLastConnect, LV_STATE_DISABLED);
+        lv_obj_set_style_bg_color(btnLastConnect, lv_color_make(0x40, 0x40, 0x40), 0);
+    }
 }
 
 bool WiFiConfigApp::loadWiFiConfig() {
@@ -615,10 +768,6 @@ void WiFiConfigApp::onUpdate() {
     }
     _lastUpdateMs = now;
     
-    // 不再需要，因为使用同步扫描
-    // if (_mode == WIFI_MODE_SCANNING) {
-    //     handleScanComplete();
-    // }
     if (_mode == WIFI_MODE_CONNECTING && _connecting) {
         wl_status_t status = WiFi.status();
         
@@ -640,7 +789,8 @@ void WiFiConfigApp::onUpdate() {
         }
         else {
             _connectAttempts++;
-            if (_connectAttempts > 200) {
+            uint32_t elapsed = now - _lastConnectStartMs;
+            if (elapsed > WIFI_LAST_CONNECT_TIMEOUT_MS || _connectAttempts > 100) {
                 _mode = WIFI_MODE_FAILED;
                 _connecting = false;
                 WiFi.disconnect();

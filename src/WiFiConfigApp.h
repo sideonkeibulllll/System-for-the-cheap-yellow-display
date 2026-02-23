@@ -5,11 +5,13 @@
 #include <WiFi.h>
 
 #define WIFI_MAX_SCAN_RESULTS   6
-#define WIFI_MAX_SSID_LEN       20
-#define WIFI_MAX_PASS_LEN       32
-#define WIFI_SCAN_TIMEOUT_MS    15000
+#define WIFI_MAX_SSID_LEN       32
+#define WIFI_MAX_PASS_LEN       64
+#define WIFI_SCAN_TIMEOUT_MS    10000
 #define WIFI_CONNECT_TIMEOUT_MS 20000
 #define WIFI_AP_SSID_PREFIX     "ESP_"
+#define WIFI_CONFIG_FILE        "/wifi_config.json"
+#define WIFI_LAST_CONNECT_TIMEOUT_MS 10000
 
 typedef enum {
     WIFI_MODE_IDLE = 0,
@@ -32,6 +34,7 @@ private:
     lv_obj_t* btnBack;
     lv_obj_t* btnScan;
     lv_obj_t* btnAPMode;
+    lv_obj_t* btnLastConnect;
     lv_obj_t* labelStatus;
     lv_obj_t* listNetworks;
     lv_obj_t* keyboard;
@@ -57,11 +60,17 @@ private:
     bool _connecting;
     int _connectAttempts;
     
+    char _lastSSID[WIFI_MAX_SSID_LEN];
+    char _lastPassword[WIFI_MAX_PASS_LEN];
+    bool _lastConfigValid;
+    uint32_t _lastConnectStartMs;
+    
     static void btn_scan_cb(lv_event_t* e);
     static void btn_ap_mode_cb(lv_event_t* e);
     static void btn_back_cb(lv_event_t* e);
     static void btn_connect_cb(lv_event_t* e);
     static void btn_cancel_cb(lv_event_t* e);
+    static void btn_last_connect_cb(lv_event_t* e);
     static void list_select_cb(lv_event_t* e);
     static void keyboard_event_cb(lv_event_t* e);
     
@@ -84,6 +93,12 @@ private:
     const char* getEncryptionType(wifi_auth_mode_t enc);
     void saveWiFiConfig(const char* ssid, const char* password);
     bool loadWiFiConfig();
+    
+    bool saveWiFiConfigToSD(const char* ssid, const char* password);
+    bool loadWiFiConfigFromSD();
+    bool hasLastConfig();
+    void startLastConnect();
+    void updateLastConnectButton();
     
 protected:
     virtual bool createUI() override;

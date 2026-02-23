@@ -11,9 +11,11 @@ private:
 
     static lv_obj_t *sidebar;
     static lv_obj_t *toggleBtn;
+    static lv_obj_t *homeBtn;
     static bool sidebarOpen;
 
     friend void toggle_sidebar(lv_event_t *e);
+    friend void home_btn_cb(lv_event_t *e);
 
 public:
     GlobalUI(const GlobalUI &) = delete;
@@ -27,4 +29,4 @@ public:
     void toggleSidebar();
 };
 
-#endif // GLOBALUI_H
+#endif
