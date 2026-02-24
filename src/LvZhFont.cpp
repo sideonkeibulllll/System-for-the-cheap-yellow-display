@@ -55,19 +55,5 @@ const uint8_t* LvZhFont::getGlyphBitmap(const lv_font_t* font, uint32_t unicode)
     statGetGlyphBitmapLv++;
     
     int width, height;
-    XFontAdapter::instance.getGlyphBitmap(unicode, glyphBitmap, &width, &height);
-    
-    static uint8_t packedBitmap[1024];
-    memset(packedBitmap, 0, sizeof(packedBitmap));
-    
-    int totalBits = width * height;
-    for (int i = 0; i < totalBits; i++) {
-        if (glyphBitmap[i]) {
-            packedBitmap[i / 8] |= (1 << (7 - (i % 8)));
-        }
-    }
-    
-    XFontAdapter::instance.addPackBitmapCount(totalBits);
-    
-    return packedBitmap;
+    return XFontAdapter::instance.getGlyphBitmapPacked(unicode, &width, &height);
 }

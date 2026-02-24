@@ -6,6 +6,8 @@
 #include <lvgl.h>
 #include <pgmspace.h>
 
+#define CACHE_SIZE 16
+
 class XFontAdapter {
 private:
     bool initialized;
@@ -24,20 +26,25 @@ private:
     unsigned long lastFileAccess;
     
     static uint8_t pixBuf[128];
-    static uint8_t tempBitmap[576];
+    
+    static uint32_t cacheUnicode[CACHE_SIZE];
+    static uint8_t cacheBitmap[CACHE_SIZE][72];
+    static int cacheIndex;
     
     static unsigned long statLastPrint;
     static unsigned int statFindCharIndex;
     static unsigned int statReadPixData;
     static unsigned int statGetGlyphBitmap;
     static unsigned int statDecodePixel;
-    static unsigned int statPackBitmap;
+    static unsigned int statCacheHit;
     
     int findCharIndex(uint32_t unicode);
     bool readPixData(int charIndex);
     void checkFileOpen();
     void checkFileClose();
     void printStats();
+    int findInCache(uint32_t unicode);
+    void addToCache(uint32_t unicode, const uint8_t* bitmap);
     
 public:
     XFontAdapter();
@@ -49,8 +56,7 @@ public:
     bool isInitialized() const { return initialized; }
     int getFontSize() const { return fontSize; }
     
-    bool getGlyphBitmap(uint32_t unicode, uint8_t* bitmap, int* width, int* height);
-    void addPackBitmapCount(int count) { statPackBitmap += count; }
+    const uint8_t* getGlyphBitmapPacked(uint32_t unicode, int* width, int* height);
     
     static XFontAdapter instance;
 };

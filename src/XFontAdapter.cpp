@@ -4,14 +4,36 @@
 
 const char* XFontAdapter::s64 = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ@#*$";
 uint8_t XFontAdapter::pixBuf[128];
-uint8_t XFontAdapter::tempBitmap[576];
+
+uint32_t XFontAdapter::cacheUnicode[CACHE_SIZE];
+uint8_t XFontAdapter::cacheBitmap[CACHE_SIZE][72];
+int XFontAdapter::cacheIndex = 0;
+
+static const uint8_t s64Decode[256] PROGMEM = {
+    255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+    255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+    255,255,255, 63, 66,255,255,255,255,255, 64,255,255,255,255,255,
+      0,  1,  2,  3,  4,  5,  6,  7,  8,  9,255,255,255,255,255,255,
+     62, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50,
+     51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61,255, 65,255,255,255,
+    255, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+     25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35,255,255,255,255,255,
+    255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+    255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+    255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+    255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+    255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+    255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+    255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+    255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255
+};
 
 unsigned long XFontAdapter::statLastPrint = 0;
 unsigned int XFontAdapter::statFindCharIndex = 0;
 unsigned int XFontAdapter::statReadPixData = 0;
 unsigned int XFontAdapter::statGetGlyphBitmap = 0;
 unsigned int XFontAdapter::statDecodePixel = 0;
-unsigned int XFontAdapter::statPackBitmap = 0;
+unsigned int XFontAdapter::statCacheHit = 0;
 
 XFontAdapter XFontAdapter::instance;
 
@@ -25,6 +47,10 @@ XFontAdapter::XFontAdapter() {
     fontPath = "/x.font";
     fileOpen = false;
     lastFileAccess = 0;
+    cacheIndex = 0;
+    for (int i = 0; i < CACHE_SIZE; i++) {
+        cacheUnicode[i] = 0xFFFFFFFF;
+    }
 }
 
 XFontAdapter::~XFontAdapter() {
@@ -126,16 +152,16 @@ void XFontAdapter::printStats() {
         Serial.printf("findCharIndex:  %u 次\n", statFindCharIndex);
         Serial.printf("readPixData:    %u 次\n", statReadPixData);
         Serial.printf("getGlyphBitmap: %u 次\n", statGetGlyphBitmap);
+        Serial.printf("cacheHit:       %u 次\n", statCacheHit);
         Serial.println("--- 像素处理 ---");
         Serial.printf("decodePixel:    %u 次\n", statDecodePixel);
-        Serial.printf("packBitmap:     %u 次\n", statPackBitmap);
         Serial.println("==========================================\n");
         
         statFindCharIndex = 0;
         statReadPixData = 0;
         statGetGlyphBitmap = 0;
         statDecodePixel = 0;
-        statPackBitmap = 0;
+        statCacheHit = 0;
         LvZhFont::resetStats();
         statLastPrint = millis();
     }
@@ -159,8 +185,23 @@ bool XFontAdapter::readPixData(int charIndex) {
     return true;
 }
 
-bool XFontAdapter::getGlyphBitmap(uint32_t unicode, uint8_t* bitmap, int* width, int* height) {
-    if (!initialized) return false;
+int XFontAdapter::findInCache(uint32_t unicode) {
+    for (int i = 0; i < CACHE_SIZE; i++) {
+        if (cacheUnicode[i] == unicode) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+void XFontAdapter::addToCache(uint32_t unicode, const uint8_t* bitmap) {
+    cacheUnicode[cacheIndex] = unicode;
+    memcpy(cacheBitmap[cacheIndex], bitmap, 72);
+    cacheIndex = (cacheIndex + 1) % CACHE_SIZE;
+}
+
+const uint8_t* XFontAdapter::getGlyphBitmapPacked(uint32_t unicode, int* width, int* height) {
+    if (!initialized) return nullptr;
     
     statGetGlyphBitmap++;
     
@@ -168,45 +209,47 @@ bool XFontAdapter::getGlyphBitmap(uint32_t unicode, uint8_t* bitmap, int* width,
     *width = isAscii ? fontSize / 2 : fontSize;
     *height = fontSize;
     
-    int bitmapSize = (*width) * (*height);
+    int cacheIdx = findInCache(unicode);
+    if (cacheIdx >= 0) {
+        statCacheHit++;
+        return cacheBitmap[cacheIdx];
+    }
+    
+    static uint8_t packedBitmap[72];
+    memset(packedBitmap, 0, sizeof(packedBitmap));
     
     int charIndex = findCharIndex(unicode);
     
     if (charIndex < 0) {
-        memset(bitmap, 0, bitmapSize);
-        return true;
+        return packedBitmap;
     }
     
     if (!readPixData(charIndex)) {
-        return false;
+        return packedBitmap;
     }
-    
-    memset(tempBitmap, 0, fontSize * fontSize);
     
     int bitIdx = 0;
     for (int i = 0; i < fontPage; i++) {
-        const char* p = strchr(s64, pixBuf[i]);
-        if (p) {
-            int d = p - s64;
+        uint8_t c = pixBuf[i];
+        uint8_t d = pgm_read_byte(&s64Decode[c]);
+        if (d < 64) {
             for (int k = 5; k >= 0; k--) {
                 statDecodePixel++;
                 int pixel = (d >> k) & 1;
-                int x = bitIdx % fontSize;
-                int y = bitIdx / fontSize;
-                if (y < fontSize && x < fontSize) {
-                    tempBitmap[y * fontSize + x] = pixel;
+                if (pixel) {
+                    int x = bitIdx % fontSize;
+                    int y = bitIdx / fontSize;
+                    if (y < fontSize && x < *width) {
+                        int packedIdx = y * (*width) + x;
+                        packedBitmap[packedIdx / 8] |= (1 << (7 - (packedIdx % 8)));
+                    }
                 }
                 bitIdx++;
             }
         }
     }
     
-    memset(bitmap, 0, bitmapSize);
-    for (int y = 0; y < *height; y++) {
-        for (int x = 0; x < *width; x++) {
-            bitmap[y * (*width) + x] = tempBitmap[y * fontSize + x];
-        }
-    }
+    addToCache(unicode, packedBitmap);
     
-    return true;
+    return packedBitmap;
 }
