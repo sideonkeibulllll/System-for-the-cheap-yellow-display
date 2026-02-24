@@ -4,6 +4,8 @@ lv_font_t LvZhFont::fontDescriptor;
 uint8_t LvZhFont::glyphBitmap[1024];
 lv_font_glyph_dsc_t LvZhFont::glyphDsc;
 bool LvZhFont::initialized = false;
+unsigned int LvZhFont::statGetGlyphDsc = 0;
+unsigned int LvZhFont::statGetGlyphBitmapLv = 0;
 
 LvZhFont LvZhFontMgr;
 
@@ -29,6 +31,8 @@ bool LvZhFont::begin() {
 }
 
 bool LvZhFont::getGlyphDsc(const lv_font_t* font, lv_font_glyph_dsc_t* dsc, uint32_t unicode, uint32_t unicode_next) {
+    statGetGlyphDsc++;
+    
     if (!XFontAdapter::instance.isInitialized()) {
         return false;
     }
@@ -48,6 +52,8 @@ bool LvZhFont::getGlyphDsc(const lv_font_t* font, lv_font_glyph_dsc_t* dsc, uint
 }
 
 const uint8_t* LvZhFont::getGlyphBitmap(const lv_font_t* font, uint32_t unicode) {
+    statGetGlyphBitmapLv++;
+    
     int width, height;
     XFontAdapter::instance.getGlyphBitmap(unicode, glyphBitmap, &width, &height);
     
@@ -60,6 +66,8 @@ const uint8_t* LvZhFont::getGlyphBitmap(const lv_font_t* font, uint32_t unicode)
             packedBitmap[i / 8] |= (1 << (7 - (i % 8)));
         }
     }
+    
+    XFontAdapter::instance.addPackBitmapCount(totalBits);
     
     return packedBitmap;
 }

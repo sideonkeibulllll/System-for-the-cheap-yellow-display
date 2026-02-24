@@ -1,9 +1,17 @@
 #include "XFontAdapter.h"
 #include "font_index_map.h"
+#include "LvZhFont.h"
 
 const char* XFontAdapter::s64 = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ@#*$";
 uint8_t XFontAdapter::pixBuf[128];
 uint8_t XFontAdapter::tempBitmap[576];
+
+unsigned long XFontAdapter::statLastPrint = 0;
+unsigned int XFontAdapter::statFindCharIndex = 0;
+unsigned int XFontAdapter::statReadPixData = 0;
+unsigned int XFontAdapter::statGetGlyphBitmap = 0;
+unsigned int XFontAdapter::statDecodePixel = 0;
+unsigned int XFontAdapter::statPackBitmap = 0;
 
 XFontAdapter XFontAdapter::instance;
 
@@ -105,14 +113,42 @@ void XFontAdapter::checkFileClose() {
 
 void XFontAdapter::update() {
     checkFileClose();
+    printStats();
+}
+
+void XFontAdapter::printStats() {
+    if (millis() - statLastPrint >= 10000) {
+        Serial.println("\n========== 字体性能统计 (每10秒) ==========");
+        Serial.println("--- LVGL层 ---");
+        Serial.printf("getGlyphDsc:    %u 次\n", LvZhFont::getStatGetGlyphDsc());
+        Serial.printf("getGlyphBitmap: %u 次\n", LvZhFont::getStatGetGlyphBitmapLv());
+        Serial.println("--- XFont层 ---");
+        Serial.printf("findCharIndex:  %u 次\n", statFindCharIndex);
+        Serial.printf("readPixData:    %u 次\n", statReadPixData);
+        Serial.printf("getGlyphBitmap: %u 次\n", statGetGlyphBitmap);
+        Serial.println("--- 像素处理 ---");
+        Serial.printf("decodePixel:    %u 次\n", statDecodePixel);
+        Serial.printf("packBitmap:     %u 次\n", statPackBitmap);
+        Serial.println("==========================================\n");
+        
+        statFindCharIndex = 0;
+        statReadPixData = 0;
+        statGetGlyphBitmap = 0;
+        statDecodePixel = 0;
+        statPackBitmap = 0;
+        LvZhFont::resetStats();
+        statLastPrint = millis();
+    }
 }
 
 int XFontAdapter::findCharIndex(uint32_t unicode) {
+    statFindCharIndex++;
     if (unicode > 0xFFFF) return -1;
     return pgm_read_word(&charIndexMap[unicode]);
 }
 
 bool XFontAdapter::readPixData(int charIndex) {
+    statReadPixData++;
     checkFileOpen();
     if (!fileOpen) return false;
     
@@ -126,30 +162,18 @@ bool XFontAdapter::readPixData(int charIndex) {
 bool XFontAdapter::getGlyphBitmap(uint32_t unicode, uint8_t* bitmap, int* width, int* height) {
     if (!initialized) return false;
     
+    statGetGlyphBitmap++;
+    
     bool isAscii = (unicode <= 127);
     *width = isAscii ? fontSize / 2 : fontSize;
     *height = fontSize;
     
     int bitmapSize = (*width) * (*height);
     
-    static uint32_t cachedUnicode = 0xFFFFFFFF;
-    static uint8_t cachedBitmap[576];
-    static int cachedWidth = 0;
-    static int cachedHeight = 0;
-    
-    if (unicode == cachedUnicode && cachedWidth == *width && cachedHeight == *height) {
-        memcpy(bitmap, cachedBitmap, bitmapSize);
-        return true;
-    }
-    
     int charIndex = findCharIndex(unicode);
     
     if (charIndex < 0) {
         memset(bitmap, 0, bitmapSize);
-        cachedUnicode = unicode;
-        cachedWidth = *width;
-        cachedHeight = *height;
-        memcpy(cachedBitmap, bitmap, bitmapSize);
         return true;
     }
     
@@ -165,6 +189,7 @@ bool XFontAdapter::getGlyphBitmap(uint32_t unicode, uint8_t* bitmap, int* width,
         if (p) {
             int d = p - s64;
             for (int k = 5; k >= 0; k--) {
+                statDecodePixel++;
                 int pixel = (d >> k) & 1;
                 int x = bitIdx % fontSize;
                 int y = bitIdx / fontSize;
@@ -182,11 +207,6 @@ bool XFontAdapter::getGlyphBitmap(uint32_t unicode, uint8_t* bitmap, int* width,
             bitmap[y * (*width) + x] = tempBitmap[y * fontSize + x];
         }
     }
-    
-    cachedUnicode = unicode;
-    cachedWidth = *width;
-    cachedHeight = *height;
-    memcpy(cachedBitmap, bitmap, bitmapSize);
     
     return true;
 }

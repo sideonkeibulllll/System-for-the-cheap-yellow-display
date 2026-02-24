@@ -26,10 +26,18 @@ private:
     static uint8_t pixBuf[128];
     static uint8_t tempBitmap[576];
     
+    static unsigned long statLastPrint;
+    static unsigned int statFindCharIndex;
+    static unsigned int statReadPixData;
+    static unsigned int statGetGlyphBitmap;
+    static unsigned int statDecodePixel;
+    static unsigned int statPackBitmap;
+    
     int findCharIndex(uint32_t unicode);
     bool readPixData(int charIndex);
     void checkFileOpen();
     void checkFileClose();
+    void printStats();
     
 public:
     XFontAdapter();
@@ -42,6 +50,7 @@ public:
     int getFontSize() const { return fontSize; }
     
     bool getGlyphBitmap(uint32_t unicode, uint8_t* bitmap, int* width, int* height);
+    void addPackBitmapCount(int count) { statPackBitmap += count; }
     
     static XFontAdapter instance;
 };
