@@ -48,6 +48,8 @@ public:
     uint32_t getFreeHeap() { return _stats.freeHeap; }
     
     void setTickInterval(uint32_t intervalUs);
+    void setRefreshInterval(uint32_t intervalMs);
+    uint32_t getRefreshInterval() { return _refreshInterval; }
     
     static void lvglTaskEntry(void* arg);
     static void tickTimerCallback(void* arg);
@@ -60,6 +62,7 @@ private:
     TaskHandle_t _lvglTaskHandle;
     esp_timer_handle_t _tickTimer;
     uint32_t _tickInterval;
+    volatile uint32_t _refreshInterval;
     
     void updateStats();
     void createTickTimer();

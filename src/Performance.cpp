@@ -15,6 +15,7 @@ PerformanceManager::PerformanceManager()
     , _lvglTaskHandle(nullptr)
     , _tickTimer(nullptr)
     , _tickInterval(PERF_TICK_INTERVAL_US)
+    , _refreshInterval(5)
 {
     memset(&_stats, 0, sizeof(_stats));
 }
@@ -92,7 +93,7 @@ void PerformanceManager::lvglTaskEntry(void* arg) {
     
     while (lvglTaskRunning) {
         lv_timer_handler();
-        vTaskDelay(pdMS_TO_TICKS(5));
+        vTaskDelay(pdMS_TO_TICKS(perf->_refreshInterval));
     }
     
     Serial.println("[Perf] LVGL task stopped");
@@ -204,4 +205,8 @@ void PerformanceManager::setTickInterval(uint32_t intervalUs) {
         esp_timer_stop(_tickTimer);
         esp_timer_start_periodic(_tickTimer, _tickInterval);
     }
+}
+
+void PerformanceManager::setRefreshInterval(uint32_t intervalMs) {
+    _refreshInterval = intervalMs;
 }

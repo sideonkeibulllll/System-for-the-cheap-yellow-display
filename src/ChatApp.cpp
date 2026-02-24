@@ -2,6 +2,8 @@
 #include "Storage.h"
 #include "FileExplorerApp.h"
 #include "LvZhFont.h"
+#include "BSP.h"
+#include "Performance.h"
 #include <SD.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
@@ -80,13 +82,21 @@ bool ChatApp::createUI() {
     lv_obj_set_style_pad_all(_blankScreen, 0, 0);
     
     _msgContainer = lv_obj_create(_blankScreen);
-    lv_obj_set_size(_msgContainer, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_size(_msgContainer, LV_PCT(100), BSP_DISPLAY_HEIGHT);
     lv_obj_set_pos(_msgContainer, 0, 0);
     lv_obj_set_style_bg_opa(_msgContainer, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(_msgContainer, 0, 0);
     lv_obj_set_style_pad_all(_msgContainer, 5, 0);
     lv_obj_set_flex_flow(_msgContainer, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(_msgContainer, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_set_scroll_dir(_msgContainer, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(_msgContainer, LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_set_style_pad_bottom(_msgContainer, 50, 0);
+    lv_obj_clear_flag(_msgContainer, LV_OBJ_FLAG_SCROLL_MOMENTUM);
+    lv_obj_clear_flag(_msgContainer, LV_OBJ_FLAG_SCROLL_ELASTIC);
+    lv_obj_set_scroll_snap_y(_msgContainer, LV_SCROLL_SNAP_NONE);
+    lv_obj_add_event_cb(_msgContainer, scroll_event_cb, LV_EVENT_SCROLL, this);
+    lv_obj_add_event_cb(_msgContainer, scroll_event_cb, LV_EVENT_SCROLL_END, this);
     
     setupSidebarButtons();
     
@@ -719,6 +729,9 @@ void ChatApp::hideInputPanel() {
     if (_inputArea) {
         lv_obj_add_flag(_inputArea, LV_OBJ_FLAG_HIDDEN);
     }
+    if (_msgContainer) {
+        lv_obj_clear_flag(_msgContainer, LV_OBJ_FLAG_HIDDEN);
+    }
     _inputPanelVisible = false;
     _modeBtn = nullptr;
     
@@ -854,6 +867,16 @@ void ChatApp::onKeyboardButtonClick(lv_obj_t* btn) {
                                                 sizeof(tempBuffer) - strlen(_preModeText));
             lv_textarea_set_text(_inputArea, tempBuffer);
         }
+    }
+}
+
+void ChatApp::scroll_event_cb(lv_event_t* e) {
+    lv_event_code_t code = lv_event_get_code(e);
+    
+    if (code == LV_EVENT_SCROLL) {
+        Perf.setRefreshInterval(500);
+    } else if (code == LV_EVENT_SCROLL_END) {
+        Perf.setRefreshInterval(5);
     }
 }
 
