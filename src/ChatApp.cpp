@@ -862,6 +862,11 @@ void ChatApp::onKeyboardButtonClick(lv_obj_t* btn) {
             strcpy(tempBuffer, _preModeText);
             ZiranmaMapping::convertDoublePinyin(_dpBuffer, tempBuffer + strlen(_preModeText), 
                                                 sizeof(tempBuffer) - strlen(_preModeText));
+            
+            if (_dpBufferLen % 2 == 0 && _dpBufferLen > 0) {
+                strcat(tempBuffer, " ");
+            }
+            
             lv_textarea_set_text(_inputArea, tempBuffer);
         }
     }
@@ -960,6 +965,11 @@ void ChatApp::keyboard_event_cb(lv_event_t* e) {
                     strcpy(tempBuffer, app->_preModeText);
                     ZiranmaMapping::convertDoublePinyin(app->_dpBuffer, tempBuffer + strlen(app->_preModeText), 
                                                         sizeof(tempBuffer) - strlen(app->_preModeText));
+                    
+                    if (app->_dpBufferLen % 2 == 0 && app->_dpBufferLen > 0) {
+                        strcat(tempBuffer, " ");
+                    }
+                    
                     lv_textarea_set_text(app->_inputArea, tempBuffer);
                 }
             }
