@@ -7,7 +7,7 @@
 
 #define ZH_FONT_SIZE        16
 #define ZH_FONT_PAGE        48
-#define ZH_MAX_CACHE        8
+#define ZH_MAX_CACHE        16
 
 class ZhFont {
 private:
@@ -18,12 +18,16 @@ private:
     int totalChars;
     int unicodeBegin;
     
+    char* unicodeIndex;
+    int unicodeIndexSize;
+    
     uint16_t cacheUnicode[ZH_MAX_CACHE];
     uint8_t cacheData[ZH_MAX_CACHE][ZH_FONT_PAGE];
     bool cacheValid[ZH_MAX_CACHE];
     int cacheIndex;
     
     bool loadFontHeader();
+    bool loadUnicodeIndex();
     int findCharIndex(uint16_t unicode);
     bool readCharData(int index, uint8_t* data);
     int findInCache(uint16_t unicode);

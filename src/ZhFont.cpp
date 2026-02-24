@@ -8,6 +8,8 @@ ZhFont::ZhFont() {
     fontPage = ZH_FONT_PAGE;
     totalChars = 0;
     unicodeBegin = 0;
+    unicodeIndex = nullptr;
+    unicodeIndexSize = 0;
     cacheIndex = 0;
     
     for (int i = 0; i < ZH_MAX_CACHE; i++) {
@@ -47,14 +49,24 @@ bool ZhFont::begin(const char* fontPath) {
         return false;
     }
     
+    if (!loadUnicodeIndex()) {
+        fontFile.close();
+        return false;
+    }
+    
     initialized = true;
-    Serial.printf("[ZhFont] Initialized: size=%d, chars=%d\n", fontSize, totalChars);
+    Serial.printf("[ZhFont] Initialized: size=%d, chars=%d, indexSize=%d\n", 
+                  fontSize, totalChars, unicodeIndexSize);
     return true;
 }
 
 void ZhFont::end() {
     if (fontFile) {
         fontFile.close();
+    }
+    if (unicodeIndex) {
+        free(unicodeIndex);
+        unicodeIndex = nullptr;
     }
     initialized = false;
 }
@@ -80,33 +92,40 @@ bool ZhFont::loadFontHeader() {
     return true;
 }
 
+bool ZhFont::loadUnicodeIndex() {
+    unicodeIndexSize = totalChars * 5;
+    unicodeIndex = (char*)malloc(unicodeIndexSize + 1);
+    
+    if (!unicodeIndex) {
+        Serial.println("[ZhFont] Failed to allocate unicode index");
+        return false;
+    }
+    
+    fontFile.seek(10);
+    int bytesRead = fontFile.readBytes(unicodeIndex, unicodeIndexSize);
+    unicodeIndex[unicodeIndexSize] = '\0';
+    
+    if (bytesRead != unicodeIndexSize) {
+        Serial.printf("[ZhFont] Read error: expected %d, got %d\n", unicodeIndexSize, bytesRead);
+        free(unicodeIndex);
+        unicodeIndex = nullptr;
+        return false;
+    }
+    
+    Serial.printf("[ZhFont] Loaded %d chars index (%d bytes)\n", totalChars, unicodeIndexSize);
+    return true;
+}
+
 int ZhFont::findCharIndex(uint16_t unicode) {
+    if (!unicodeIndex) return -1;
+    
     char search[6];
     snprintf(search, sizeof(search), "u%04X", unicode);
     
-    fontFile.seek(10);
+    char* found = strstr(unicodeIndex, search);
+    if (!found) return -1;
     
-    int bufSize = 256;
-    char buf[256];
-    int remaining = totalChars * 5;
-    int offset = 0;
-    
-    while (remaining > 0) {
-        int toRead = (remaining > bufSize) ? bufSize : remaining;
-        fontFile.readBytes(buf, toRead);
-        
-        for (int i = 0; i <= toRead - 5; i += 5) {
-            if (buf[i] == 'u' && 
-                strncmp(&buf[i], search, 5) == 0) {
-                return (offset + i) / 5;
-            }
-        }
-        
-        offset += toRead;
-        remaining -= toRead;
-    }
-    
-    return -1;
+    return (found - unicodeIndex) / 5;
 }
 
 bool ZhFont::readCharData(int index, uint8_t* data) {

@@ -7,7 +7,7 @@
 class LvZhFont {
 private:
     lv_font_t lvFont;
-    uint8_t glyphBitmap[32];
+    uint8_t glyphBitmap[128];
     bool initialized;
     
     static bool getGlyphCb(const lv_font_t* font, lv_font_glyph_dsc_t* dsc_out, 
