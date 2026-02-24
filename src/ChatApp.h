@@ -93,7 +93,6 @@ private:
     static void keyboard_event_cb(lv_event_t* e);
     static void sidebar_btn_cb(lv_event_t* e);
     static void model_selector_cb(lv_event_t* e);
-    static void scroll_event_cb(lv_event_t* e);
     
     void onFloatBtnClick();
     void showInputPanel();

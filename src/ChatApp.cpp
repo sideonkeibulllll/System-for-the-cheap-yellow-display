@@ -3,7 +3,6 @@
 #include "FileExplorerApp.h"
 #include "LvZhFont.h"
 #include "BSP.h"
-#include "Performance.h"
 #include <SD.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
@@ -95,8 +94,6 @@ bool ChatApp::createUI() {
     lv_obj_clear_flag(_msgContainer, LV_OBJ_FLAG_SCROLL_MOMENTUM);
     lv_obj_clear_flag(_msgContainer, LV_OBJ_FLAG_SCROLL_ELASTIC);
     lv_obj_set_scroll_snap_y(_msgContainer, LV_SCROLL_SNAP_NONE);
-    lv_obj_add_event_cb(_msgContainer, scroll_event_cb, LV_EVENT_SCROLL, this);
-    lv_obj_add_event_cb(_msgContainer, scroll_event_cb, LV_EVENT_SCROLL_END, this);
     
     setupSidebarButtons();
     
@@ -867,16 +864,6 @@ void ChatApp::onKeyboardButtonClick(lv_obj_t* btn) {
                                                 sizeof(tempBuffer) - strlen(_preModeText));
             lv_textarea_set_text(_inputArea, tempBuffer);
         }
-    }
-}
-
-void ChatApp::scroll_event_cb(lv_event_t* e) {
-    lv_event_code_t code = lv_event_get_code(e);
-    
-    if (code == LV_EVENT_SCROLL) {
-        Perf.setRefreshInterval(500);
-    } else if (code == LV_EVENT_SCROLL_END) {
-        Perf.setRefreshInterval(5);
     }
 }
 
