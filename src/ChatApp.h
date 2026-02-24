@@ -10,7 +10,7 @@
 
 #define CHAT_INPUT_MAX_LEN      200
 #define CHAT_DP_BUFFER_SIZE     24
-#define CHAT_MSG_MAX_LEN        200
+#define CHAT_MSG_MAX_LEN        1024
 #define CHAT_PATH_MAX_LEN       48
 #define CHAT_PROMPT_MAX_LEN     256
 #define CHAT_TEMP_FILE          "/ChatApp/.response_temp"

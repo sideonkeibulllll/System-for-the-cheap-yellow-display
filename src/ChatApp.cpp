@@ -492,11 +492,13 @@ void ChatApp::appendMessageToFile(const char* text, bool isSent) {
             file.print("\\n");
         } else if (*p == '\r') {
             // skip
+        } else if (*p == '\\') {
+            file.print("\\\\");
         } else {
-            file.write(*p);
+            file.print(*p);
         }
     }
-    file.println();
+    file.print("\n");
     file.close();
     
     Serial.printf("[ChatApp] Appended message to %s\n", _currentChatPath);
@@ -521,22 +523,39 @@ bool ChatApp::loadChatFromFile(const char* path) {
         if (line.length() == 0) continue;
         
         bool isSent = false;
-        int prefixLen = 0;
+        const char* text = nullptr;
         
         if (line.startsWith("[user] ")) {
             isSent = true;
-            prefixLen = 7;
+            text = line.c_str() + 7;
         } else if (line.startsWith("[order] ")) {
             isSent = false;
-            prefixLen = 8;
+            text = line.c_str() + 8;
         } else {
             continue;
         }
         
-        String content = line.substring(prefixLen);
-        content.replace("\\n", "\n");
-        
-        addMessageToList(content.c_str(), isSent);
+        char* decoded = (char*)malloc(strlen(text) * 2 + 1);
+        if (decoded) {
+            const char* src = text;
+            char* dst = decoded;
+            while (*src) {
+                if (*src == '\\' && *(src + 1) == 'n') {
+                    *dst++ = '\n';
+                    src += 2;
+                } else if (*src == '\\' && *(src + 1) == '\\') {
+                    *dst++ = '\\';
+                    src += 2;
+                } else {
+                    *dst++ = *src++;
+                }
+            }
+            *dst = '\0';
+            addMessageToList(decoded, isSent);
+            free(decoded);
+        } else {
+            addMessageToList(text, isSent);
+        }
     }
     
     file.close();
@@ -606,8 +625,6 @@ lv_obj_t* ChatApp::createMessageBubble(lv_color_t bgColor, const char* text) {
     lv_obj_set_style_border_width(bubble, 0, 0);
     lv_obj_set_style_radius(bubble, 0, 0);
     lv_obj_set_style_pad_all(bubble, 8, 0);
-    lv_obj_set_scroll_dir(bubble, LV_DIR_HOR);
-    lv_obj_set_scrollbar_mode(bubble, LV_SCROLLBAR_MODE_AUTO);
     
     lv_obj_t* label = lv_label_create(bubble);
     lv_label_set_text(label, text);
@@ -619,7 +636,7 @@ lv_obj_t* ChatApp::createMessageBubble(lv_color_t bgColor, const char* text) {
         lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
     }
     
-    lv_label_set_long_mode(label, LV_LABEL_LONG_SCROLL_CIRCULAR);
+    lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(label, 280);
     
     return bubble;
