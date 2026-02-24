@@ -141,10 +141,20 @@ bool ChatApp::onResume() {
         return false;
     }
     
+    bsp_set_touch_fps_optimize(true);
+    
     checkPendingFile();
     checkPendingPromptFile();
     
     return true;
+}
+
+void ChatApp::onPause() {
+    Serial.println("[ChatApp] onPause");
+    
+    bsp_set_touch_fps_optimize(false);
+    
+    BaseApp::onPause();
 }
 
 void ChatApp::saveState() {
@@ -159,6 +169,7 @@ void ChatApp::saveState() {
     stateFile.printf("chat_path=%s\n", _currentChatPath);
     stateFile.printf("input_text=%s\n", _inputArea ? lv_textarea_get_text(_inputArea) : "");
     stateFile.printf("model_index=%d\n", _selectedModelIndex);
+    stateFile.printf("prompt_path=%s\n", _promptPath);
     
     stateFile.close();
     Serial.println("[ChatApp] State saved");
@@ -179,6 +190,7 @@ bool ChatApp::loadState() {
     
     char chatPath[CHAT_PATH_MAX_LEN] = "";
     char inputText[CHAT_INPUT_MAX_LEN] = "";
+    char promptPath[CHAT_PATH_MAX_LEN] = "";
     int modelIndex = 0;
     
     while (stateFile.available()) {
@@ -194,12 +206,19 @@ bool ChatApp::loadState() {
             if (modelIndex < 0 || modelIndex >= (int)AI_MODEL_COUNT) {
                 modelIndex = 0;
             }
+        } else if (line.startsWith("prompt_path=")) {
+            strncpy(promptPath, line.c_str() + 12, CHAT_PATH_MAX_LEN - 1);
         }
     }
     
     stateFile.close();
     
     _selectedModelIndex = modelIndex;
+    
+    if (promptPath[0] != '\0' && SD.exists(promptPath)) {
+        loadPromptFromFile(promptPath);
+        Serial.printf("[ChatApp] Restored prompt: %s\n", promptPath);
+    }
     
     if (chatPath[0] != '\0' && SD.exists(chatPath)) {
         loadChatFromFile(chatPath);
@@ -865,6 +884,10 @@ void ChatApp::onKeyboardButtonClick(lv_obj_t* btn) {
             
             if (_dpBufferLen % 2 == 0 && _dpBufferLen > 0) {
                 strcat(tempBuffer, " ");
+                strncpy(_preModeText, tempBuffer, CHAT_INPUT_MAX_LEN - 1);
+                _preModeText[CHAT_INPUT_MAX_LEN - 1] = '\0';
+                _dpBufferLen = 0;
+                _dpBuffer[0] = '\0';
             }
             
             lv_textarea_set_text(_inputArea, tempBuffer);
@@ -968,6 +991,10 @@ void ChatApp::keyboard_event_cb(lv_event_t* e) {
                     
                     if (app->_dpBufferLen % 2 == 0 && app->_dpBufferLen > 0) {
                         strcat(tempBuffer, " ");
+                        strncpy(app->_preModeText, tempBuffer, CHAT_INPUT_MAX_LEN - 1);
+                        app->_preModeText[CHAT_INPUT_MAX_LEN - 1] = '\0';
+                        app->_dpBufferLen = 0;
+                        app->_dpBuffer[0] = '\0';
                     }
                     
                     lv_textarea_set_text(app->_inputArea, tempBuffer);
@@ -1205,14 +1232,7 @@ bool ChatApp::performAIRequest(const char* userMessage) {
     
     Serial.println("[ChatNet] Request sent, receiving...");
     
-    char* lineBuf = (char*)malloc(1024);
-    if (!lineBuf) {
-        Serial.println("[ChatNet] Failed to allocate receive buffer");
-        tempFile.close();
-        SD.remove(CHAT_TEMP_FILE);
-        delete client;
-        return false;
-    }
+    static char lineBuf[1024];
     
     int linePos = 0;
     bool inBody = false;
@@ -1260,8 +1280,6 @@ bool ChatApp::performAIRequest(const char* userMessage) {
         vTaskDelay(pdMS_TO_TICKS(1));
     }
     
-    free(lineBuf);
-    
     Serial.printf("[ChatNet] Received %d bytes\n", totalBytes);
     
     client->stop();
@@ -1295,14 +1313,7 @@ void ChatApp::processAIResponse() {
     _responseContent[0] = '\0';
     int contentLen = 0;
     
-    char* lineBuf = (char*)malloc(1024);
-    if (!lineBuf) {
-        Serial.println("[ChatNet] Failed to allocate line buffer");
-        tempFile.close();
-        strcpy(_responseContent, "Error: Memory");
-        _responseReady = true;
-        return;
-    }
+    static char parseBuf[1024];
     
     int linePos = 0;
     int lineCount = 0;
@@ -1310,21 +1321,21 @@ void ChatApp::processAIResponse() {
     while (tempFile.available() && contentLen < CHAT_MSG_MAX_LEN - 64) {
         char c = tempFile.read();
         if (c == '\n') {
-            lineBuf[linePos] = '\0';
+            parseBuf[linePos] = '\0';
             lineCount++;
             
             if (lineCount <= 5) {
-                Serial.printf("[ChatNet] Line %d: '%s'\n", lineCount, lineBuf);
+                Serial.printf("[ChatNet] Line %d: '%s'\n", lineCount, parseBuf);
             }
             
-            int lineLen = strlen(lineBuf);
-            if (lineLen > 0 && lineBuf[lineLen-1] == '\r') {
-                lineBuf[--lineLen] = '\0';
+            int lineLen = strlen(parseBuf);
+            if (lineLen > 0 && parseBuf[lineLen-1] == '\r') {
+                parseBuf[--lineLen] = '\0';
             }
             
             bool isChunkSize = true;
             for (int i = 0; i < lineLen; i++) {
-                char ch = lineBuf[i];
+                char ch = parseBuf[i];
                 if (!((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F'))) {
                     isChunkSize = false;
                     break;
@@ -1335,8 +1346,8 @@ void ChatApp::processAIResponse() {
                 continue;
             }
             
-            if (strncmp(lineBuf, "data: ", 6) == 0) {
-                const char* data = lineBuf + 6;
+            if (strncmp(parseBuf, "data: ", 6) == 0) {
+                const char* data = parseBuf + 6;
                 if (strcmp(data, "[DONE]") == 0) {
                     Serial.println("[ChatNet] Got [DONE]");
                     break;
@@ -1353,11 +1364,10 @@ void ChatApp::processAIResponse() {
             
             linePos = 0;
         } else if (linePos < 1023) {
-            lineBuf[linePos++] = c;
+            parseBuf[linePos++] = c;
         }
     }
     
-    free(lineBuf);
     tempFile.close();
     SD.remove(CHAT_TEMP_FILE);
     

@@ -68,6 +68,7 @@ private:
     bool createUI() override;
     void destroyUI() override;
     bool onResume() override;
+    void onPause() override;
     
     void setupSidebarButtons();
     void clearSidebarButtons();

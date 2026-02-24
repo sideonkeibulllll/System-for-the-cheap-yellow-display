@@ -27,6 +27,7 @@ static lv_indev_drv_t indev_drv;
 
 static int16_t lastX = 0;
 static int16_t lastY = 0;
+static bool touchFpsOptimizeEnabled = false;
 
 static void initPWM() {
     Serial.println("[BSP] Initializing PWM backlight on GPIO 21...");
@@ -72,7 +73,9 @@ void bsp_touch_read(lv_indev_drv_t *indev_driver, lv_indev_data_t *data) {
         data->point.y = y;
         data->state = LV_INDEV_STATE_PR;
         
-        Perf.setRefreshInterval(200);
+        if (touchFpsOptimizeEnabled) {
+            Perf.setRefreshInterval(200);
+        }
         
         Power.resetIdleTimer();
     } else {
@@ -80,8 +83,14 @@ void bsp_touch_read(lv_indev_drv_t *indev_driver, lv_indev_data_t *data) {
         data->point.y = lastY;
         data->state = LV_INDEV_STATE_REL;
         
-        Perf.setRefreshInterval(5);
+        if (touchFpsOptimizeEnabled) {
+            Perf.setRefreshInterval(5);
+        }
     }
+}
+
+void bsp_set_touch_fps_optimize(bool enable) {
+    touchFpsOptimizeEnabled = enable;
 }
 
 bool bsp_display_init(void) {
