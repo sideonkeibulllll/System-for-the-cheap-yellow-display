@@ -59,20 +59,8 @@ bool ZhDraw::begin(const char* path) {
     
     unicodeBegin = 10 + totalChars * 5;
     
-    int indexSize = totalChars * 5;
-    unicodeIndex = (char*)malloc(indexSize + 1);
-    if (!unicodeIndex) {
-        Serial.println("[ZhDraw] Failed to allocate index");
-        fontFile.close();
-        return false;
-    }
-    
-    fontFile.seek(10);
-    fontFile.readBytes(unicodeIndex, indexSize);
-    unicodeIndex[indexSize] = '\0';
-    
     initialized = true;
-    Serial.printf("[ZhDraw] Ready: size=%d, chars=%d\n", fontSize, totalChars);
+    Serial.printf("[ZhDraw] Ready: size=%d, chars=%d (no index loaded)\n", fontSize, totalChars);
     return true;
 }
 
@@ -88,15 +76,31 @@ void ZhDraw::end() {
 }
 
 int ZhDraw::findCharIndex(uint16_t unicode) {
-    if (!unicodeIndex) return -1;
-    
     char search[6];
     snprintf(search, sizeof(search), "u%04X", unicode);
     
-    char* found = strstr(unicodeIndex, search);
-    if (!found) return -1;
+    fontFile.seek(10);
     
-    return (found - unicodeIndex) / 5;
+    int bufSize = 256;
+    char buf[256];
+    int remaining = totalChars * 5;
+    int offset = 0;
+    
+    while (remaining > 0) {
+        int toRead = (remaining > bufSize) ? bufSize : remaining;
+        fontFile.readBytes(buf, toRead);
+        
+        for (int i = 0; i <= toRead - 5; i += 5) {
+            if (buf[i] == 'u' && strncmp(&buf[i], search, 5) == 0) {
+                return (offset + i) / 5;
+            }
+        }
+        
+        offset += toRead;
+        remaining -= toRead;
+    }
+    
+    return -1;
 }
 
 int ZhDraw::getTextWidth(const char* text) {
@@ -106,21 +110,13 @@ int ZhDraw::getTextWidth(const char* text) {
     const uint8_t* p = (const uint8_t*)text;
     
     while (*p) {
-        uint16_t unicode = 0;
-        
         if (*p < 0x80) {
-            unicode = *p++;
             width += fontSize / 2 + 1;
+            p++;
         } else {
-            if ((p[0] & 0xE0) == 0xC0 && p[1]) {
-                unicode = ((p[0] & 0x1F) << 6) | (p[1] & 0x3F);
-                p += 2;
-            } else if ((p[0] & 0xF0) == 0xE0 && p[1] && p[2]) {
-                unicode = ((p[0] & 0x0F) << 12) | ((p[1] & 0x3F) << 6) | (p[2] & 0x3F);
-                p += 3;
-            } else {
-                p++;
-            }
+            if ((p[0] & 0xE0) == 0xC0) p += 2;
+            else if ((p[0] & 0xF0) == 0xE0) p += 3;
+            else p++;
             width += fontSize + 1;
         }
     }

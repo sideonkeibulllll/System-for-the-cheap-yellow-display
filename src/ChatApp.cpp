@@ -490,135 +490,21 @@ lv_obj_t* ChatApp::createMessageBubble(lv_color_t bgColor, const char* text) {
     int textLen = strlen(text);
     if (textLen == 0) return nullptr;
     
-    int fontSize = ZhDrawMgr.isInitialized() ? ZhDrawMgr.getFontSize() : 14;
-    int lineHeight = fontSize + 2;
-    int maxLineWidth = 280;
-    int padding = 8;
-    
-    int lines = 1;
-    int currentWidth = 0;
-    const char* p = text;
-    while (*p) {
-        if (*p == '\n') {
-            lines++;
-            currentWidth = 0;
-            p++;
-        } else if (*p < 0x80) {
-            currentWidth += fontSize / 2 + 1;
-            p++;
-        } else {
-            currentWidth += fontSize + 1;
-            if ((p[0] & 0xE0) == 0xC0) p += 2;
-            else if ((p[0] & 0xF0) == 0xE0) p += 3;
-            else p++;
-        }
-        if (currentWidth > maxLineWidth) {
-            lines++;
-            currentWidth = 0;
-        }
-    }
-    
-    int bubbleWidth = maxLineWidth + padding * 2;
-    int bubbleHeight = lines * lineHeight + padding * 2;
-    int canvasWidth = bubbleWidth;
-    int canvasHeight = bubbleHeight;
-    
     lv_obj_t* bubble = lv_obj_create(_msgContainer);
-    lv_obj_set_size(bubble, bubbleWidth, bubbleHeight);
+    lv_obj_set_width(bubble, 300);
+    lv_obj_set_height(bubble, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(bubble, bgColor, 0);
     lv_obj_set_style_bg_opa(bubble, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(bubble, 0, 0);
-    lv_obj_set_style_radius(bubble, 8, 0);
-    lv_obj_set_style_pad_all(bubble, 0, 0);
+    lv_obj_set_style_radius(bubble, 0, 0);
+    lv_obj_set_style_pad_all(bubble, 8, 0);
     
-    static lv_color_t* canvasBuf = nullptr;
-    static int canvasBufSize = 0;
-    int neededSize = canvasWidth * canvasHeight;
-    
-    if (canvasBufSize < neededSize) {
-        if (canvasBuf) free(canvasBuf);
-        canvasBuf = (lv_color_t*)malloc(neededSize * sizeof(lv_color_t));
-        canvasBufSize = neededSize;
-    }
-    
-    if (!canvasBuf) {
-        lv_obj_t* label = lv_label_create(bubble);
-        lv_label_set_text(label, text);
-        lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
-        return bubble;
-    }
-    
-    memset(canvasBuf, 0, neededSize * sizeof(lv_color_t));
-    
-    lv_obj_t* canvas = lv_canvas_create(bubble);
-    lv_canvas_set_buffer(canvas, canvasBuf, canvasWidth, canvasHeight, LV_IMG_CF_TRUE_COLOR);
-    lv_obj_set_pos(canvas, 0, 0);
-    
-    lv_draw_rect_dsc_t rectDsc;
-    lv_draw_rect_dsc_init(&rectDsc);
-    rectDsc.bg_color = bgColor;
-    rectDsc.bg_opa = LV_OPA_COVER;
-    rectDsc.radius = 8;
-    lv_canvas_draw_rect(canvas, 0, 0, canvasWidth, canvasHeight, &rectDsc);
-    
-    if (ZhDrawMgr.isInitialized()) {
-        uint16_t textColor = lv_color_make(0x20, 0x20, 0x20).full;
-        
-        int x = padding;
-        int y = padding;
-        currentWidth = 0;
-        p = text;
-        
-        while (*p) {
-            if (*p == '\n') {
-                x = padding;
-                y += lineHeight;
-                currentWidth = 0;
-                p++;
-                continue;
-            }
-            
-            int charWidth = 0;
-            if (*p < 0x80) {
-                charWidth = fontSize / 2;
-            } else {
-                charWidth = fontSize;
-            }
-            
-            if (currentWidth + charWidth > maxLineWidth) {
-                x = padding;
-                y += lineHeight;
-                currentWidth = 0;
-            }
-            
-            if (*p < 0x80) {
-                char tmp[2] = {*p, '\0'};
-                ZhDrawMgr.drawTextToCanvas(canvas, x, y, tmp, textColor);
-                p++;
-            } else {
-                char tmp[4] = {0};
-                if ((p[0] & 0xE0) == 0xC0 && p[1]) {
-                    tmp[0] = p[0]; tmp[1] = p[1]; tmp[2] = '\0';
-                    p += 2;
-                } else if ((p[0] & 0xF0) == 0xE0 && p[1] && p[2]) {
-                    tmp[0] = p[0]; tmp[1] = p[1]; tmp[2] = p[2]; tmp[3] = '\0';
-                    p += 3;
-                } else {
-                    p++;
-                    continue;
-                }
-                ZhDrawMgr.drawTextToCanvas(canvas, x, y, tmp, textColor);
-            }
-            
-            x += charWidth + 1;
-            currentWidth += charWidth + 1;
-        }
-    } else {
-        lv_obj_t* label = lv_label_create(bubble);
-        lv_label_set_text(label, text);
-        lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
-        lv_obj_set_pos(label, padding, padding);
-    }
+    lv_obj_t* label = lv_label_create(bubble);
+    lv_label_set_text(label, text);
+    lv_obj_set_style_text_color(label, lv_color_make(0x20, 0x20, 0x20), 0);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
+    lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(label, 280);
     
     return bubble;
 }

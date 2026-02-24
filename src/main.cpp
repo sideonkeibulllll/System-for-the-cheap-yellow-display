@@ -15,7 +15,6 @@
 #include "FileExplorerApp.h"
 #include "ChatApp.h"
 #include "GlobalUI.h"
-#include "ZhDraw.h"
 
 static TaskHandle_t appTaskHandle = nullptr;
 
@@ -181,12 +180,6 @@ void setup() {
     Power.setBacklightModeCallback(backlight_mode_callback);
     
     AppMgr.begin();
-    
-    if (ZhDrawMgr.begin()) {
-        Serial.println("[Main] Chinese font loaded");
-    } else {
-        Serial.println("[Main] Chinese font load failed");
-    }
     
     app_info_t settingsInfo;
     strncpy(settingsInfo.name, "Settings", APP_NAME_MAX_LEN - 1);
