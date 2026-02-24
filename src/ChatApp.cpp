@@ -1,7 +1,7 @@
 #include "ChatApp.h"
 #include "Storage.h"
 #include "FileExplorerApp.h"
-#include "ZhDraw.h"
+#include "LvZhFont.h"
 #include <SD.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
@@ -502,7 +502,13 @@ lv_obj_t* ChatApp::createMessageBubble(lv_color_t bgColor, const char* text) {
     lv_obj_t* label = lv_label_create(bubble);
     lv_label_set_text(label, text);
     lv_obj_set_style_text_color(label, lv_color_make(0x20, 0x20, 0x20), 0);
-    lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
+    
+    if (LvZhFontMgr.isInitialized()) {
+        lv_obj_set_style_text_font(label, LvZhFontMgr.getFont(), 0);
+    } else {
+        lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
+    }
+    
     lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(label, 280);
     

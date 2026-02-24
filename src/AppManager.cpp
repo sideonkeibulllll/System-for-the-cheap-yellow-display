@@ -3,6 +3,7 @@
 #include "Storage.h"
 #include "PowerManager.h"
 #include "GlobalUI.h"
+#include "LvZhFont.h"
 #include <lvgl.h>
 #include <Arduino.h>
 #include <cstring>
@@ -358,9 +359,15 @@ void AppManager::createHomeScreen() {
     lv_obj_set_size(_homeScreen, BSP_DISPLAY_WIDTH, BSP_DISPLAY_HEIGHT);
     
     lv_obj_t* title = lv_label_create(_homeScreen);
-    lv_label_set_text(title, "ESP32 App Launcher");
+    lv_label_set_text(title, "欢迎回来喵");
     lv_obj_set_style_text_color(title, lv_color_make(0x00, 0xFF, 0x00), 0);
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
+    
+    if (LvZhFontMgr.isInitialized()) {
+        lv_obj_set_style_text_font(title, LvZhFontMgr.getFont(), 0);
+    } else {
+        lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
+    }
+    
     lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 5);
     
     _appContainer = lv_obj_create(_homeScreen);

@@ -2,28 +2,22 @@
 #define LV_ZH_FONT_H
 
 #include <lvgl.h>
-#include "ZhFont.h"
+#include "XFontAdapter.h"
 
 class LvZhFont {
 private:
-    lv_font_t lvFont;
-    uint8_t glyphBitmap[128];
-    bool initialized;
+    static lv_font_t fontDescriptor;
+    static uint8_t glyphBitmap[256];
+    static lv_font_glyph_dsc_t glyphDsc;
+    static bool initialized;
     
-    static bool getGlyphCb(const lv_font_t* font, lv_font_glyph_dsc_t* dsc_out, 
-                           uint32_t unicode_letter, uint32_t unicode_letter_next);
-    static const uint8_t* getGlyphBitmapCb(const lv_font_t* font, uint32_t unicode_letter);
+    static bool getGlyphDsc(const lv_font_t* font, lv_font_glyph_dsc_t* dsc, uint32_t unicode, uint32_t unicode_next);
+    static const uint8_t* getGlyphBitmap(const lv_font_t* font, uint32_t unicode);
     
 public:
-    LvZhFont();
-    ~LvZhFont();
-    
-    bool begin();
-    lv_font_t* getFont() { return &lvFont; }
-    uint8_t* getGlyphBuffer() { return glyphBitmap; }
-    bool isInitialized() const { return initialized; }
-    
-    static LvZhFont& getInstance();
+    static bool begin();
+    static lv_font_t* getFont() { return &fontDescriptor; }
+    static bool isInitialized() { return initialized; }
 };
 
 extern LvZhFont LvZhFontMgr;

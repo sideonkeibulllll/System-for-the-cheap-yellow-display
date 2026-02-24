@@ -1,115 +1,77 @@
 #include "LvZhFont.h"
 
+lv_font_t LvZhFont::fontDescriptor;
+uint8_t LvZhFont::glyphBitmap[256];
+lv_font_glyph_dsc_t LvZhFont::glyphDsc;
+bool LvZhFont::initialized = false;
+
 LvZhFont LvZhFontMgr;
-
-LvZhFont::LvZhFont() {
-    initialized = false;
-}
-
-LvZhFont::~LvZhFont() {
-}
-
-LvZhFont& LvZhFont::getInstance() {
-    return LvZhFontMgr;
-}
 
 bool LvZhFont::begin() {
     if (initialized) return true;
     
-    if (!ZhFontMgr.begin("/x.font")) {
-        Serial.println("[LvZhFont] Failed to init ZhFont");
+    if (!XFontAdapter::instance.begin()) {
+        Serial.println("[LvZhFont] XFontAdapter init failed");
         return false;
     }
     
-    lvFont.get_glyph_dsc = getGlyphCb;
-    lvFont.get_glyph_bitmap = getGlyphBitmapCb;
-    lvFont.line_height = ZhFontMgr.getFontSize() + 2;
-    lvFont.base_line = 0;
-    lvFont.subpx = LV_FONT_SUBPX_NONE;
-    lvFont.underline_position = -2;
-    lvFont.underline_thickness = 1;
-    lvFont.dsc = NULL;
-    lvFont.fallback = NULL;
-    lvFont.user_data = NULL;
+    memset(&fontDescriptor, 0, sizeof(lv_font_t));
+    fontDescriptor.get_glyph_dsc = getGlyphDsc;
+    fontDescriptor.get_glyph_bitmap = getGlyphBitmap;
+    fontDescriptor.line_height = XFontAdapter::instance.getFontSize();
+    fontDescriptor.base_line = 0;
+    fontDescriptor.dsc = NULL;
+    fontDescriptor.fallback = NULL;
+    fontDescriptor.subpx = LV_FONT_SUBPX_NONE;
     
     initialized = true;
-    
-    Serial.printf("[LvZhFont] Chinese font initialized, size=%d, page=%d\n", 
-                  ZhFontMgr.getFontSize(), ZhFontMgr.getFontPage());
-    return true;
-}
-
-bool LvZhFont::getGlyphCb(const lv_font_t* font, lv_font_glyph_dsc_t* dsc_out, 
-                          uint32_t unicode_letter, uint32_t unicode_letter_next) {
-    (void)font;
-    (void)unicode_letter_next;
-    
-    if (unicode_letter < 0x20) {
-        dsc_out->adv_w = 0;
-        dsc_out->box_w = 0;
-        dsc_out->box_h = 0;
-        dsc_out->ofs_x = 0;
-        dsc_out->ofs_y = 0;
-        dsc_out->bpp = 0;
-        dsc_out->is_placeholder = false;
-        return true;
-    }
-    
-    int fontSize = ZhFontMgr.getFontSize();
-    int width = (unicode_letter < 0x80) ? fontSize / 2 : fontSize;
-    
-    dsc_out->adv_w = width + 1;
-    dsc_out->box_w = width;
-    dsc_out->box_h = fontSize;
-    dsc_out->ofs_x = 0;
-    dsc_out->ofs_y = 0;
-    dsc_out->bpp = 1;
-    dsc_out->is_placeholder = false;
+    Serial.printf("[LvZhFont] Initialized with fontSize=%d\n", XFontAdapter::instance.getFontSize());
     
     return true;
 }
 
-const uint8_t* LvZhFont::getGlyphBitmapCb(const lv_font_t* font, uint32_t unicode_letter) {
-    LvZhFont* self = &LvZhFontMgr;
-    
-    if (unicode_letter < 0x20) {
-        return NULL;
+bool LvZhFont::getGlyphDsc(const lv_font_t* font, lv_font_glyph_dsc_t* dsc, uint32_t unicode, uint32_t unicode_next) {
+    if (!XFontAdapter::instance.isInitialized()) {
+        Serial.println("[LvZhFont] getGlyphDsc: not initialized");
+        return false;
     }
     
-    int fontPage = ZhFontMgr.getFontPage();
-    int fontSize = ZhFontMgr.getFontSize();
-    int width = (unicode_letter < 0x80) ? fontSize / 2 : fontSize;
-    
-    uint8_t* bitmap = (uint8_t*)malloc(fontPage);
-    if (!bitmap) {
-        return NULL;
+    static uint32_t lastUnicode = 0;
+    if (unicode != lastUnicode) {
+        Serial.printf("[LvZhFont] getGlyphDsc: unicode=0x%04X (%c)\n", unicode, unicode < 128 ? unicode : '?');
+        lastUnicode = unicode;
     }
     
-    if (!ZhFontMgr.getCharBitmap((uint16_t)unicode_letter, bitmap)) {
-        free(bitmap);
-        return NULL;
+    int width, height;
+    if (!XFontAdapter::instance.getGlyphBitmap(unicode, glyphBitmap, &width, &height)) {
+        Serial.printf("[LvZhFont] getGlyphDsc: getGlyphBitmap failed for 0x%04X\n", unicode);
+        return false;
     }
     
-    const char* base64Chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ@#*$";
+    dsc->adv_w = width;
+    dsc->box_w = width;
+    dsc->box_h = height;
+    dsc->ofs_x = 0;
+    dsc->ofs_y = 0;
+    dsc->bpp = 1;
+    dsc->is_placeholder = 0;
     
-    memset(self->glyphBitmap, 0, sizeof(self->glyphBitmap));
+    return true;
+}
+
+const uint8_t* LvZhFont::getGlyphBitmap(const lv_font_t* font, uint32_t unicode) {
+    int width, height;
+    XFontAdapter::instance.getGlyphBitmap(unicode, glyphBitmap, &width, &height);
     
-    int outBitIdx = 0;
-    for (int byteIdx = 0; byteIdx < fontPage && outBitIdx < fontSize * width; byteIdx++) {
-        uint8_t val = 0;
-        const char* p = strchr(base64Chars, bitmap[byteIdx]);
-        if (p) val = p - base64Chars;
-        
-        for (int bit = 5; bit >= 0 && outBitIdx < fontSize * width; bit--) {
-            bool pixel = (val >> bit) & 1;
-            
-            if (pixel) {
-                self->glyphBitmap[outBitIdx / 8] |= (0x80 >> (outBitIdx % 8));
-            }
-            outBitIdx++;
+    static uint8_t packedBitmap[288];
+    memset(packedBitmap, 0, sizeof(packedBitmap));
+    
+    int totalBits = width * height;
+    for (int i = 0; i < totalBits; i++) {
+        if (glyphBitmap[i]) {
+            packedBitmap[i / 8] |= (1 << (7 - (i % 8)));
         }
     }
     
-    free(bitmap);
-    return self->glyphBitmap;
+    return packedBitmap;
 }

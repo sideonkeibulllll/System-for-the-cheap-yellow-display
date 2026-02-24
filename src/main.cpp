@@ -15,6 +15,7 @@
 #include "FileExplorerApp.h"
 #include "ChatApp.h"
 #include "GlobalUI.h"
+#include "LvZhFont.h"
 
 static TaskHandle_t appTaskHandle = nullptr;
 
@@ -180,6 +181,8 @@ void setup() {
     Power.setBacklightModeCallback(backlight_mode_callback);
     
     AppMgr.begin();
+    
+    LvZhFontMgr.begin();
     
     app_info_t settingsInfo;
     strncpy(settingsInfo.name, "Settings", APP_NAME_MAX_LEN - 1);
