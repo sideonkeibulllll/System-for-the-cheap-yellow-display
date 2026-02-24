@@ -86,14 +86,14 @@ bool ChatApp::createUI() {
     lv_obj_set_style_bg_opa(_msgContainer, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(_msgContainer, 0, 0);
     lv_obj_set_style_pad_all(_msgContainer, 5, 0);
-    lv_obj_set_flex_flow(_msgContainer, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(_msgContainer, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START);
-    lv_obj_set_scroll_dir(_msgContainer, LV_DIR_HOR);
+    lv_obj_set_flex_flow(_msgContainer, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(_msgContainer, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_set_scroll_dir(_msgContainer, LV_DIR_VER);
     lv_obj_set_scrollbar_mode(_msgContainer, LV_SCROLLBAR_MODE_AUTO);
-    lv_obj_set_style_pad_right(_msgContainer, 50, 0);
+    lv_obj_set_style_pad_bottom(_msgContainer, 50, 0);
     lv_obj_clear_flag(_msgContainer, LV_OBJ_FLAG_SCROLL_MOMENTUM);
     lv_obj_clear_flag(_msgContainer, LV_OBJ_FLAG_SCROLL_ELASTIC);
-    lv_obj_set_scroll_snap_x(_msgContainer, LV_SCROLL_SNAP_NONE);
+    lv_obj_set_scroll_snap_y(_msgContainer, LV_SCROLL_SNAP_NONE);
     
     setupSidebarButtons();
     
@@ -599,12 +599,15 @@ lv_obj_t* ChatApp::createMessageBubble(lv_color_t bgColor, const char* text) {
     if (textLen == 0) return nullptr;
     
     lv_obj_t* bubble = lv_obj_create(_msgContainer);
-    lv_obj_set_size(bubble, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_width(bubble, 300);
+    lv_obj_set_height(bubble, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(bubble, bgColor, 0);
     lv_obj_set_style_bg_opa(bubble, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(bubble, 0, 0);
     lv_obj_set_style_radius(bubble, 0, 0);
     lv_obj_set_style_pad_all(bubble, 8, 0);
+    lv_obj_set_scroll_dir(bubble, LV_DIR_HOR);
+    lv_obj_set_scrollbar_mode(bubble, LV_SCROLLBAR_MODE_AUTO);
     
     lv_obj_t* label = lv_label_create(bubble);
     lv_label_set_text(label, text);
@@ -617,7 +620,7 @@ lv_obj_t* ChatApp::createMessageBubble(lv_color_t bgColor, const char* text) {
     }
     
     lv_label_set_long_mode(label, LV_LABEL_LONG_SCROLL_CIRCULAR);
-    lv_obj_set_width(label, LV_SIZE_CONTENT);
+    lv_obj_set_width(label, 280);
     
     return bubble;
 }
