@@ -1,7 +1,7 @@
 #include "LvZhFont.h"
 
 lv_font_t LvZhFont::fontDescriptor;
-uint8_t LvZhFont::glyphBitmap[256];
+uint8_t LvZhFont::glyphBitmap[1024];
 lv_font_glyph_dsc_t LvZhFont::glyphDsc;
 bool LvZhFont::initialized = false;
 
@@ -11,7 +11,6 @@ bool LvZhFont::begin() {
     if (initialized) return true;
     
     if (!XFontAdapter::instance.begin()) {
-        Serial.println("[LvZhFont] XFontAdapter init failed");
         return false;
     }
     
@@ -25,32 +24,21 @@ bool LvZhFont::begin() {
     fontDescriptor.subpx = LV_FONT_SUBPX_NONE;
     
     initialized = true;
-    Serial.printf("[LvZhFont] Initialized with fontSize=%d\n", XFontAdapter::instance.getFontSize());
     
     return true;
 }
 
 bool LvZhFont::getGlyphDsc(const lv_font_t* font, lv_font_glyph_dsc_t* dsc, uint32_t unicode, uint32_t unicode_next) {
     if (!XFontAdapter::instance.isInitialized()) {
-        Serial.println("[LvZhFont] getGlyphDsc: not initialized");
         return false;
     }
     
-    static uint32_t lastUnicode = 0;
-    if (unicode != lastUnicode) {
-        Serial.printf("[LvZhFont] getGlyphDsc: unicode=0x%04X (%c)\n", unicode, unicode < 128 ? unicode : '?');
-        lastUnicode = unicode;
-    }
+    int fontSize = XFontAdapter::instance.getFontSize();
+    bool isAscii = (unicode <= 127);
     
-    int width, height;
-    if (!XFontAdapter::instance.getGlyphBitmap(unicode, glyphBitmap, &width, &height)) {
-        Serial.printf("[LvZhFont] getGlyphDsc: getGlyphBitmap failed for 0x%04X\n", unicode);
-        return false;
-    }
-    
-    dsc->adv_w = width;
-    dsc->box_w = width;
-    dsc->box_h = height;
+    dsc->adv_w = isAscii ? fontSize / 2 : fontSize;
+    dsc->box_w = isAscii ? fontSize / 2 : fontSize;
+    dsc->box_h = fontSize;
     dsc->ofs_x = 0;
     dsc->ofs_y = 0;
     dsc->bpp = 1;
@@ -63,7 +51,7 @@ const uint8_t* LvZhFont::getGlyphBitmap(const lv_font_t* font, uint32_t unicode)
     int width, height;
     XFontAdapter::instance.getGlyphBitmap(unicode, glyphBitmap, &width, &height);
     
-    static uint8_t packedBitmap[288];
+    static uint8_t packedBitmap[1024];
     memset(packedBitmap, 0, sizeof(packedBitmap));
     
     int totalBits = width * height;

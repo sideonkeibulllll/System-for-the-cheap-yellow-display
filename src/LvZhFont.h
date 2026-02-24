@@ -7,7 +7,7 @@
 class LvZhFont {
 private:
     static lv_font_t fontDescriptor;
-    static uint8_t glyphBitmap[256];
+    static uint8_t glyphBitmap[1024];
     static lv_font_glyph_dsc_t glyphDsc;
     static bool initialized;
     

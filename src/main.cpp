@@ -16,6 +16,7 @@
 #include "ChatApp.h"
 #include "GlobalUI.h"
 #include "LvZhFont.h"
+#include "XFontAdapter.h"
 
 static TaskHandle_t appTaskHandle = nullptr;
 
@@ -152,6 +153,7 @@ static void appTaskEntry(void* arg) {
     while (true) {
         Power.update();
         AppMgr.update();
+        XFontAdapter::instance.update();
         
         vTaskDelay(pdMS_TO_TICKS(50));
     }
@@ -180,9 +182,9 @@ void setup() {
     Power.setStateCallback(power_state_callback);
     Power.setBacklightModeCallback(backlight_mode_callback);
     
-    AppMgr.begin();
-    
     LvZhFontMgr.begin();
+    
+    AppMgr.begin();
     
     app_info_t settingsInfo;
     strncpy(settingsInfo.name, "Settings", APP_NAME_MAX_LEN - 1);
