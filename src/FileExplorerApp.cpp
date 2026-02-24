@@ -191,11 +191,18 @@ void FileExplorerApp::confirmSelection() {
     
     Serial.printf("[FileExplorer] File selected: %s\n", fullPath);
     
-    File pendingFile = SD.open("/ChatApp/.pending_file", FILE_WRITE);
+    const char* pendingFileName = "/ChatApp/.pending_file";
+    
+    if (strstr(selectStartPath, "prompts") != nullptr) {
+        pendingFileName = "/ChatApp/.pending_prompt";
+        Serial.println("[FileExplorer] Using pending_prompt for prompts folder");
+    }
+    
+    File pendingFile = SD.open(pendingFileName, FILE_WRITE);
     if (pendingFile) {
         pendingFile.printf("%s\n", fullPath);
         pendingFile.close();
-        Serial.println("[FileExplorer] Written pending file command");
+        Serial.printf("[FileExplorer] Written to %s\n", pendingFileName);
     } else {
         Serial.println("[FileExplorer] Failed to write pending file");
     }

@@ -21,6 +21,11 @@ static void onModelSelectCallback(void* user_data) {
     if (app) app->onModelSelect();
 }
 
+static void onPromptSelectCallback(void* user_data) {
+    ChatApp* app = (ChatApp*)user_data;
+    if (app) app->onPromptSelect();
+}
+
 ChatApp::ChatApp() : BaseApp("Chat") {
     _blankScreen = nullptr;
     _floatBtn = nullptr;
@@ -31,6 +36,7 @@ ChatApp::ChatApp() : BaseApp("Chat") {
     _btnOpenChat = nullptr;
     _btnNewChat = nullptr;
     _btnModel = nullptr;
+    _btnPrompt = nullptr;
     _modelSelector = nullptr;
     _inputPanelVisible = false;
     _doublePinyinMode = false;
@@ -50,6 +56,8 @@ ChatApp::ChatApp() : BaseApp("Chat") {
     _pendingMessage[0] = '\0';
     _responseContent[0] = '\0';
     _responseReady = false;
+    _systemPrompt[0] = '\0';
+    _promptPath[0] = '\0';
 }
 
 ChatApp::~ChatApp() {
@@ -127,6 +135,7 @@ bool ChatApp::onResume() {
     }
     
     checkPendingFile();
+    checkPendingPromptFile();
     
     return true;
 }
@@ -229,6 +238,61 @@ void ChatApp::processPendingFile(const char* path) {
     }
 }
 
+void ChatApp::checkPendingPromptFile() {
+    if (!_sdCardAvailable) return;
+    
+    if (!SD.exists("/ChatApp/.pending_prompt")) {
+        return;
+    }
+    
+    File pendingFile = SD.open("/ChatApp/.pending_prompt");
+    if (!pendingFile) return;
+    
+    String path = pendingFile.readStringUntil('\n');
+    path.trim();
+    pendingFile.close();
+    
+    SD.remove("/ChatApp/.pending_prompt");
+    
+    if (path.length() > 0) {
+        loadPromptFromFile(path.c_str());
+    }
+}
+
+void ChatApp::loadPromptFromFile(const char* path) {
+    Serial.printf("[ChatApp] Loading prompt from: %s\n", path);
+    
+    const char* actualPath = path;
+    if (path[0] == 'S' && path[1] == ':') {
+        actualPath = path + 2;
+    }
+    
+    if (!SD.exists(actualPath)) {
+        Serial.printf("[ChatApp] Prompt file not found: %s\n", actualPath);
+        return;
+    }
+    
+    File promptFile = SD.open(actualPath);
+    if (!promptFile) {
+        Serial.println("[ChatApp] Failed to open prompt file");
+        return;
+    }
+    
+    String content = promptFile.readString();
+    promptFile.close();
+    
+    content.trim();
+    
+    strncpy(_systemPrompt, content.c_str(), CHAT_PROMPT_MAX_LEN - 1);
+    _systemPrompt[CHAT_PROMPT_MAX_LEN - 1] = '\0';
+    
+    strncpy(_promptPath, actualPath, CHAT_PATH_MAX_LEN - 1);
+    _promptPath[CHAT_PATH_MAX_LEN - 1] = '\0';
+    
+    Serial.printf("[ChatApp] Loaded prompt (%d bytes): %.50s...\n", 
+        strlen(_systemPrompt), _systemPrompt);
+}
+
 void ChatApp::destroyUI() {
     Serial.println("[ChatApp] destroyUI");
     
@@ -263,6 +327,8 @@ void ChatApp::setupSidebarButtons() {
     modelSymbol[0] = AI_MODELS[_selectedModelIndex].name[0];
     _btnModel = ui.addSidebarButton(modelSymbol, onModelSelectCallback, this);
     
+    _btnPrompt = ui.addSidebarButton(LV_SYMBOL_FILE, onPromptSelectCallback, this);
+    
     Serial.println("[ChatApp] Sidebar buttons added");
 }
 
@@ -272,10 +338,12 @@ void ChatApp::clearSidebarButtons() {
     ui.removeSidebarButton(_btnOpenChat);
     ui.removeSidebarButton(_btnNewChat);
     ui.removeSidebarButton(_btnModel);
+    ui.removeSidebarButton(_btnPrompt);
     
     _btnOpenChat = nullptr;
     _btnNewChat = nullptr;
     _btnModel = nullptr;
+    _btnPrompt = nullptr;
     
     hideModelSelector();
     
@@ -576,6 +644,21 @@ void ChatApp::onNewChat() {
     _currentChatPath[0] = '\0';
 }
 
+void ChatApp::onPromptSelect() {
+    Serial.println("[ChatApp] onPromptSelect - request prompt file");
+    
+    if (!_sdCardAvailable) {
+        Serial.println("[ChatApp] SD card not available");
+        return;
+    }
+    
+    FileExplorerApp::_explorerMode = MODE_SELECT_FILE;
+    strncpy(FileExplorerApp::selectStartPath, "S:/ChatApp/prompts", MAX_PATH_LENGTH - 1);
+    Serial.printf("[ChatApp] Set prompt select mode, path: %s\n", FileExplorerApp::selectStartPath);
+    
+    AppMgr.switchToApp("FileExplorer");
+}
+
 void ChatApp::onFileSelected(const char* path) {
     Serial.printf("[ChatApp] onFileSelected: %s\n", path);
     
@@ -614,6 +697,9 @@ void ChatApp::onFloatBtnClick() {
 void ChatApp::showInputPanel() {
     Serial.println("[ChatApp] showInputPanel");
     if (_inputArea) {
+        if (_msgContainer) {
+            lv_obj_add_flag(_msgContainer, LV_OBJ_FLAG_HIDDEN);
+        }
         lv_obj_clear_flag(_inputArea, LV_OBJ_FLAG_HIDDEN);
         lv_obj_move_foreground(_inputArea);
         lv_obj_move_foreground(_floatBtn);
@@ -1074,11 +1160,19 @@ bool ChatApp::performAIRequest(const char* userMessage) {
         return false;
     }
     
-    char body[CHAT_INPUT_MAX_LEN + 128];
-    snprintf(body, sizeof(body), 
-        "{\"model\":\"%s\",\"messages\":[{\"role\":\"user\",\"content\":\"%s\"}],\"stream\":true}",
-        model.model, userMessage);
-    int bodyLen = strlen(body);
+    char body[CHAT_INPUT_MAX_LEN + CHAT_PROMPT_MAX_LEN + 256];
+    int bodyLen;
+    
+    if (_systemPrompt[0] != '\0') {
+        bodyLen = snprintf(body, sizeof(body), 
+            "{\"model\":\"%s\",\"messages\":[{\"role\":\"system\",\"content\":\"%s\"},{\"role\":\"user\",\"content\":\"%s\"}],\"stream\":true}",
+            model.model, _systemPrompt, userMessage);
+        Serial.printf("[ChatNet] Request with system prompt (%d bytes)\n", strlen(_systemPrompt));
+    } else {
+        bodyLen = snprintf(body, sizeof(body), 
+            "{\"model\":\"%s\",\"messages\":[{\"role\":\"user\",\"content\":\"%s\"}],\"stream\":true}",
+            model.model, userMessage);
+    }
     
     client->printf("POST %s HTTP/1.1\r\n", uri);
     client->printf("Host: %s\r\n", host);

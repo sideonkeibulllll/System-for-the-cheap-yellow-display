@@ -12,6 +12,7 @@
 #define CHAT_DP_BUFFER_SIZE     24
 #define CHAT_MSG_MAX_LEN        200
 #define CHAT_PATH_MAX_LEN       48
+#define CHAT_PROMPT_MAX_LEN     256
 #define CHAT_TEMP_FILE          "/ChatApp/.response_temp"
 #define CHAT_NET_TASK_STACK     16384
 #define CHAT_NET_TASK_PRIORITY  3
@@ -34,6 +35,7 @@ private:
     lv_obj_t* _btnOpenChat;
     lv_obj_t* _btnNewChat;
     lv_obj_t* _btnModel;
+    lv_obj_t* _btnPrompt;
     lv_obj_t* _modelSelector;
     
     bool _inputPanelVisible;
@@ -60,6 +62,9 @@ private:
     char _responseContent[CHAT_MSG_MAX_LEN];
     bool _responseReady;
     
+    char _systemPrompt[CHAT_PROMPT_MAX_LEN];
+    char _promptPath[CHAT_PATH_MAX_LEN];
+    
     bool createUI() override;
     void destroyUI() override;
     bool onResume() override;
@@ -78,6 +83,8 @@ private:
     bool loadState() override;
     void checkPendingFile();
     void processPendingFile(const char* path);
+    void checkPendingPromptFile();
+    void loadPromptFromFile(const char* path);
     
     static void float_btn_cb(lv_event_t* e);
     static void input_focus_cb(lv_event_t* e);
@@ -127,6 +134,7 @@ public:
     void onOpenChat();
     void onNewChat();
     void onModelSelect();
+    void onPromptSelect();
 };
 
 BaseApp* createChatApp();
