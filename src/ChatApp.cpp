@@ -1202,6 +1202,19 @@ void ChatApp::processAIResponse() {
                 lineBuf[--lineLen] = '\0';
             }
             
+            bool isChunkSize = true;
+            for (int i = 0; i < lineLen; i++) {
+                char ch = lineBuf[i];
+                if (!((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F'))) {
+                    isChunkSize = false;
+                    break;
+                }
+            }
+            if (isChunkSize && lineLen > 0 && lineLen <= 4) {
+                linePos = 0;
+                continue;
+            }
+            
             if (strncmp(lineBuf, "data: ", 6) == 0) {
                 const char* data = lineBuf + 6;
                 if (strcmp(data, "[DONE]") == 0) {
@@ -1235,10 +1248,14 @@ void ChatApp::processAIResponse() {
 void ChatApp::parseSSELine(const char* line, char* content, int maxLen) {
     content[0] = '\0';
     
-    const char* contentStart = strstr(line, "\"content\":\"");
-    if (!contentStart) return;
-    
-    contentStart += 11;
+    const char* contentStart = strstr(line, "\"reasoning_content\":\"");
+    if (contentStart) {
+        contentStart += 21;
+    } else {
+        contentStart = strstr(line, "\"content\":\"");
+        if (!contentStart) return;
+        contentStart += 11;
+    }
     
     int i = 0;
     while (*contentStart && *contentStart != '"' && i < maxLen - 1) {
