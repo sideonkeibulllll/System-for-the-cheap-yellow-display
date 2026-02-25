@@ -626,9 +626,31 @@ lv_obj_t* ChatApp::createMessageBubble(lv_color_t bgColor, const char* text) {
     lv_obj_set_style_radius(bubble, 0, 0);
     lv_obj_set_style_pad_all(bubble, 8, 0);
     
+    char* displayText = (char*)malloc(textLen * 4 + 1);
+    if (displayText) {
+        int j = 0;
+        for (int i = 0; i < textLen; i++) {
+            if (text[i] == '\n') {
+                displayText[j++] = ' ';
+                displayText[j++] = ' ';
+                displayText[j++] = ' ';
+                displayText[j++] = ' ';
+            } else {
+                displayText[j++] = text[i];
+            }
+        }
+        displayText[j] = '\0';
+    } else {
+        displayText = (char*)text;
+    }
+    
     lv_obj_t* label = lv_label_create(bubble);
-    lv_label_set_text(label, text);
+    lv_label_set_text(label, displayText);
     lv_obj_set_style_text_color(label, lv_color_make(0x20, 0x20, 0x20), 0);
+    
+    if (displayText != text) {
+        free(displayText);
+    }
     
     if (LvZhFontMgr.isInitialized()) {
         lv_obj_set_style_text_font(label, LvZhFontMgr.getFont(), 0);
@@ -636,8 +658,7 @@ lv_obj_t* ChatApp::createMessageBubble(lv_color_t bgColor, const char* text) {
         lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
     }
     
-    lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
-    lv_obj_set_width(label, 280);
+    lv_label_set_long_mode(label, LV_LABEL_LONG_CLIP);
     
     return bubble;
 }
@@ -769,6 +790,10 @@ void ChatApp::showInputPanel() {
 void ChatApp::hideInputPanel() {
     Serial.println("[ChatApp] hideInputPanel");
     
+    if (_doublePinyinMode) {
+        flushDpBuffer();
+    }
+    
     sendMessage();
     
     if (_keyboard) {
@@ -785,7 +810,6 @@ void ChatApp::hideInputPanel() {
     _modeBtn = nullptr;
     
     if (_doublePinyinMode) {
-        flushDpBuffer();
         _doublePinyinMode = false;
     }
 }
