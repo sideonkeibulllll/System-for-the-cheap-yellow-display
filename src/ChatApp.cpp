@@ -691,10 +691,14 @@ void ChatApp::sendMessage() {
     if (!_inputArea) return;
     
     const char* text = lv_textarea_get_text(_inputArea);
+    Serial.printf("[ChatApp] sendMessage - input text: '%s'\n", text ? text : "NULL");
+    
     if (text && strlen(text) > 0) {
         char messageCopy[CHAT_INPUT_MAX_LEN];
         strncpy(messageCopy, text, CHAT_INPUT_MAX_LEN - 1);
         messageCopy[CHAT_INPUT_MAX_LEN - 1] = '\0';
+        
+        Serial.printf("[ChatApp] sendMessage - sending: '%s'\n", messageCopy);
         
         addMessage(messageCopy, true);
         lv_textarea_set_text(_inputArea, "");
@@ -789,9 +793,19 @@ void ChatApp::showInputPanel() {
 
 void ChatApp::hideInputPanel() {
     Serial.println("[ChatApp] hideInputPanel");
+    Serial.printf("[ChatApp] hideInputPanel - _doublePinyinMode=%d, _dpBufferLen=%d, _dpBuffer='%s'\n", 
+                  _doublePinyinMode, _dpBufferLen, _dpBuffer);
+    
+    if (_inputArea) {
+        Serial.printf("[ChatApp] hideInputPanel - inputArea before flush: '%s'\n", lv_textarea_get_text(_inputArea));
+    }
     
     if (_doublePinyinMode) {
         flushDpBuffer();
+    }
+    
+    if (_inputArea) {
+        Serial.printf("[ChatApp] hideInputPanel - inputArea after flush: '%s'\n", lv_textarea_get_text(_inputArea));
     }
     
     sendMessage();
@@ -869,6 +883,7 @@ void ChatApp::flushDpBuffer() {
     ZiranmaMapping::convertDoublePinyin(_dpBuffer, converted, sizeof(converted));
     
     Serial.printf("[ChatApp] Flush DP buffer: '%s' -> '%s'\n", _dpBuffer, converted);
+    Serial.printf("[ChatApp] _preModeText: '%s'\n", _preModeText);
     
     const char* currentText = lv_textarea_get_text(_inputArea);
     int preLen = strlen(_preModeText);
@@ -880,6 +895,8 @@ void ChatApp::flushDpBuffer() {
         strcat(newText, converted);
     }
     newText[CHAT_INPUT_MAX_LEN - 1] = '\0';
+    
+    Serial.printf("[ChatApp] flushDpBuffer - newText: '%s'\n", newText);
     
     lv_textarea_set_text(_inputArea, newText);
     
@@ -1225,6 +1242,31 @@ void ChatApp::networkTaskEntry(void* arg) {
     vTaskDelete(NULL);
 }
 
+static void jsonEscape(const char* input, char* output, int maxLen) {
+    int j = 0;
+    for (int i = 0; input[i] && j < maxLen - 3; i++) {
+        char c = input[i];
+        if (c == '"') {
+            output[j++] = '\\';
+            output[j++] = '"';
+        } else if (c == '\\') {
+            output[j++] = '\\';
+            output[j++] = '\\';
+        } else if (c == '\n') {
+            output[j++] = '\\';
+            output[j++] = 'n';
+        } else if (c == '\r') {
+            // skip carriage return
+        } else if (c == '\t') {
+            output[j++] = '\\';
+            output[j++] = 't';
+        } else {
+            output[j++] = c;
+        }
+    }
+    output[j] = '\0';
+}
+
 bool ChatApp::performAIRequest(const char* userMessage) {
     const ai_model_config_t& model = AI_MODELS[_selectedModelIndex];
     Serial.printf("[ChatNet] Request to %s\n", model.name);
@@ -1264,19 +1306,27 @@ bool ChatApp::performAIRequest(const char* userMessage) {
         return false;
     }
     
-    char body[CHAT_INPUT_MAX_LEN + CHAT_PROMPT_MAX_LEN + 256];
+    char body[CHAT_INPUT_MAX_LEN + CHAT_PROMPT_MAX_LEN + 512];
     int bodyLen;
     
+    static char escapedMsg[CHAT_INPUT_MAX_LEN * 2];
+    static char escapedPrompt[CHAT_PROMPT_MAX_LEN * 2];
+    
+    jsonEscape(userMessage, escapedMsg, sizeof(escapedMsg));
+    
     if (_systemPrompt[0] != '\0') {
+        jsonEscape(_systemPrompt, escapedPrompt, sizeof(escapedPrompt));
         bodyLen = snprintf(body, sizeof(body), 
             "{\"model\":\"%s\",\"messages\":[{\"role\":\"system\",\"content\":\"%s\"},{\"role\":\"user\",\"content\":\"%s\"}],\"stream\":true}",
-            model.model, _systemPrompt, userMessage);
+            model.model, escapedPrompt, escapedMsg);
         Serial.printf("[ChatNet] Request with system prompt (%d bytes)\n", strlen(_systemPrompt));
     } else {
         bodyLen = snprintf(body, sizeof(body), 
             "{\"model\":\"%s\",\"messages\":[{\"role\":\"user\",\"content\":\"%s\"}],\"stream\":true}",
-            model.model, userMessage);
+            model.model, escapedMsg);
     }
+    
+    Serial.printf("[ChatNet] Request body: %s\n", body);
     
     client->printf("POST %s HTTP/1.1\r\n", uri);
     client->printf("Host: %s\r\n", host);
@@ -1306,6 +1356,7 @@ bool ChatApp::performAIRequest(const char* userMessage) {
             if (!inBody) {
                 if (c == '\n') {
                     lineBuf[linePos] = '\0';
+                    Serial.printf("[ChatNet] Header: '%s'\n", lineBuf);
                     if (linePos == 0 || (linePos == 1 && lineBuf[0] == '\r')) {
                         inBody = true;
                         Serial.println("[ChatNet] Headers received, entering body");
@@ -1319,6 +1370,7 @@ bool ChatApp::performAIRequest(const char* userMessage) {
                     lineBuf[linePos] = '\0';
                     if (linePos > 0 && lineBuf[0] != '\r') {
                         tempFile.println(lineBuf);
+                        Serial.printf("[ChatNet] Body line: '%s'\n", lineBuf);
                     }
                     linePos = 0;
                 } else if (linePos < 1023) {
