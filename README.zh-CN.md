@@ -52,6 +52,48 @@ YIYAN-OS 是一套专为 ESP32-2432S028R（Cheap Yellow Display / CYD）开发�
 - **光敏传感器**：环境光检测（GPIO 34）
 - **BOOT 按键**：多功能唤醒/模式切换
 
+## 🤖 内置应用
+
+### 💬 ChatApp - AI 聊天应用
+支持多种 AI 大模型 API 的聊天应用：
+- **DeepSeek API**：支持 deepseek-chat 模型
+- **GLM-5 API**：支持智谱 AI 的 GLM-5 模型
+- **硅基流动 API**：支持多种开源模型（Qwen、DeepSeek-R1 等）
+- **中文输入法**：内置自然码输入法，支持中文输入
+- **流式响应**：实时显示 AI 回复内容
+- **历史记录**：支持查看对话历史
+
+配置方法：复制 `src/api_config_example.h` 为 `src/api_config.h`，填入你的 API 密钥：
+```cpp
+#define API_KEY "your-api-key-here"
+#define API_BASE_URL "https://api.deepseek.com"
+#define API_MODEL "deepseek-chat"
+```
+
+### 📁 FileExplorerApp - 文件管理器
+- **双存储支持**：同时浏览 SPIFFS 和 SD 卡文件
+- **文件操作**：支持查看、复制、移动、删除文件
+- **图片预览**：支持 BMP、JPG、PNG 格式图片查看
+- **文本查看**：支持文本文件浏览
+
+### ⚙️ SettingsApp - 系统设置
+- **背光调节**：手动/自动/关闭三种模式
+- **WiFi 配置**：扫描并连接无线网络
+- **系统信息**：查看内存使用、运行时间等
+
+### 📶 WiFiConfigApp - WiFi 配置
+- **网络扫描**：自动扫描周围 WiFi 网络
+- **密码输入**：支持虚拟键盘输入密码
+- **连接状态**：实时显示连接状态和 IP 地址
+
+### 🎨 DemoApp - 演示应用
+- **UI 展示**：展示各种 LVGL 控件效果
+- **性能测试**：测试系统渲染性能
+
+### 🔤 FontApp - 字体管理
+- **字体浏览**：查看系统可用字体
+- **字体预览**：预览字体渲染效果
+
 ## 📊 性能指标
 
 | 指标 | 数值 |
@@ -85,6 +127,13 @@ pio run
 pio run --target upload
 ```
 
+### API 配置（可选）
+如需使用 AI 聊天功能，请复制配置文件：
+```bash
+cp src/api_config_example.h src/api_config.h
+```
+然后编辑 `src/api_config.h`，填入你的 API 密钥。
+
 ## 📁 项目结构
 
 ```
@@ -96,8 +145,15 @@ pio run --target upload
 │   ├── Performance.*      # 性能监控
 │   ├── PowerManager.*     # 功耗管理
 │   ├── AppManager.*       # 应用管理器
+│   ├── ChatApp.*          # AI 聊天应用
+│   ├── FileExplorerApp.*  # 文件管理器
+│   ├── WiFiConfigApp.*    # WiFi 配置应用
 │   ├── SettingsApp.*      # 设置应用
 │   ├── DemoApp.*          # 示例应用
+│   ├── FontApp.*          # 字体管理应用
+│   ├── ZhFont.*           # 中文字体支持
+│   ├── LvZhFont.*         # LVGL 中文渲染
+│   ├── ZhDraw.*           # 中文绘制组件
 │   └── lv_conf.h          # LVGL 配置
 ├── include/
 ├── lib/
@@ -136,6 +192,19 @@ class MyApp : public BaseApp {
     void onUpdate() override;    // 周期更新
 };
 ```
+
+## 📝 更新日志
+
+**v3.0.0** - 重大更新
+- 优化 ChatApp AI 聊天功能
+- 改进中文渲染性能
+- 增强系统稳定性
+
+**v2.x 系列** - 功能完善
+- 添加 AI 聊天支持
+- 优化中文字体渲染
+- 改进文件管理器
+- 添加性能监控
 
 ## 📄 许可证
 

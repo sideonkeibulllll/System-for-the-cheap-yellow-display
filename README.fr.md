@@ -52,6 +52,48 @@ YIYAN-OS est un framework complet de système GUI embarqué conçu pour la carte
 - **Capteur de Lumière** : Détection de lumière ambiante (GPIO 34)
 - **Bouton BOOT** : Réveil/commutation multi-fonction
 
+## 🤖 Applications Intégrées
+
+### 💬 ChatApp - Chat IA
+Supporte plusieurs API de modèles de langage IA :
+- **DeepSeek API** : Supporte le modèle deepseek-chat
+- **GLM-5 API** : Supporte le modèle GLM-5 de Zhipu AI
+- **SiliconFlow API** : Supporte divers modèles open-source (Qwen, DeepSeek-R1, etc.)
+- **Saisie Chinoise** : Méthode de saisie Ziranma intégrée
+- **Réponse en Flux** : Affichage en temps réel des réponses IA
+- **Historique** : Visualisation de l'historique des conversations
+
+Configuration : Copiez `src/api_config_example.h` vers `src/api_config.h` et ajoutez votre clé API :
+```cpp
+#define API_KEY "your-api-key-here"
+#define API_BASE_URL "https://api.deepseek.com"
+#define API_MODEL "deepseek-chat"
+```
+
+### 📁 FileExplorerApp - Gestionnaire de Fichiers
+- **Double Stockage** : Navigation dans les fichiers SPIFFS et carte SD
+- **Opérations sur Fichiers** : Visualisation, copie, déplacement, suppression
+- **Aperçu d'Images** : Support des formats BMP, JPG, PNG
+- **Visionneuse de Texte** : Navigation dans les fichiers texte
+
+### ⚙️ SettingsApp - Paramètres Système
+- **Contrôle du Rétroéclairage** : Modes Manuel/Auto/Off
+- **Configuration WiFi** : Scan et connexion aux réseaux sans fil
+- **Informations Système** : Visualisation de l'utilisation mémoire, temps de fonctionnement, etc.
+
+### 📶 WiFiConfigApp - Configuration WiFi
+- **Scan des Réseaux** : Scan automatique des réseaux WiFi environnants
+- **Saisie du Mot de Passe** : Clavier virtuel pour la saisie du mot de passe
+- **État de Connexion** : Affichage en temps réel de l'état de connexion et de l'adresse IP
+
+### 🎨 DemoApp - Application de Démo
+- **Présentation UI** : Démonstration des effets des contrôles LVGL
+- **Test de Performance** : Test des performances de rendu du système
+
+### 🔤 FontApp - Gestion des Polices
+- **Navigation des Polices** : Visualisation des polices disponibles
+- **Aperçu des Polices** : Prévisualisation du rendu des polices
+
 ## 📊 Indicateurs de Performance
 
 | Indicateur | Valeur |
@@ -85,6 +127,13 @@ pio run
 pio run --target upload
 ```
 
+### Configuration API (Optionnel)
+Pour utiliser la fonctionnalité de chat IA, copiez le fichier de configuration :
+```bash
+cp src/api_config_example.h src/api_config.h
+```
+Puis modifiez `src/api_config.h` et ajoutez votre clé API.
+
 ## 📁 Structure du Projet
 
 ```
@@ -96,8 +145,15 @@ pio run --target upload
 │   ├── Performance.*      # Surveillance des performances
 │   ├── PowerManager.*     # Gestion de l'énergie
 │   ├── AppManager.*       # Gestionnaire d'applications
-│   ├── SettingsApp.*      # Application paramètres
+│   ├── ChatApp.*          # Application de chat IA
+│   ├── FileExplorerApp.*  # Gestionnaire de fichiers
+│   ├── WiFiConfigApp.*    # Configuration WiFi
+│   ├── SettingsApp.*      # Paramètres système
 │   ├── DemoApp.*          # Application démo
+│   ├── FontApp.*          # Gestion des polices
+│   ├── ZhFont.*           # Support des polices chinoises
+│   ├── LvZhFont.*         # Rendu chinois LVGL
+│   ├── ZhDraw.*           # Composant de dessin chinois
 │   └── lv_conf.h          # Configuration LVGL
 ├── include/
 ├── lib/
@@ -136,6 +192,19 @@ class MonApp : public BaseApp {
     void onUpdate() override;    // Mise à jour périodique
 };
 ```
+
+## 📝 Journal des Modifications
+
+**v3.0.0** - Mise à Jour Majeure
+- Optimisation de la fonctionnalité de chat IA ChatApp
+- Amélioration des performances de rendu chinois
+- Renforcement de la stabilité du système
+
+**Série v2.x** - Amélioration des Fonctionnalités
+- Ajout du support de chat IA
+- Optimisation du rendu des polices chinoises
+- Amélioration du gestionnaire de fichiers
+- Ajout de la surveillance des performances
 
 ## 📄 Licence
 
