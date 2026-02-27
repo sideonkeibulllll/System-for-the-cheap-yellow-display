@@ -48,6 +48,44 @@ YIYAN-OS 是一套专为 ESP32-2432S028R（Cheap Yellow Display / CYD）开发�
 - **光敏传感器**：环境光检测（GPIO 34）
 - **BOOT 按键**：多功能唤醒/模式切换
 
+### 🤖 内置应用
+
+#### 💬 ChatApp - AI 聊天应用
+支持多种 AI 大模型 API 的聊天应用：
+- **DeepSeek API**：支持 deepseek-chat 模型
+- **GLM-5 API**：支持智谱 AI 的 GLM-5 模型
+- **硅基流动 API**：支持多种开源模型（Qwen、DeepSeek-R1 等）
+- **中文输入法**：内置自然码输入法，支持中文输入
+- **流式响应**：实时显示 AI 回复内容
+- **历史记录**：支持查看对话历史
+
+配置方法：修改 `src/api_config.h` 文件，填入你的 API 密钥：
+```cpp
+#define API_KEY "your-api-key-here"
+#define API_BASE_URL "https://api.deepseek.com"
+#define API_MODEL "deepseek-chat"
+```
+
+#### 📁 FileExplorerApp - 文件管理器
+- **双存储支持**：同时浏览 SPIFFS 和 SD 卡文件
+- **文件操作**：支持查看、复制、移动、删除文件
+- **图片预览**：支持 BMP、JPG、PNG 格式图片查看
+- **文本查看**：支持文本文件浏览
+
+#### ⚙️ SettingsApp - 系统设置
+- **背光调节**：手动/自动/关闭三种模式
+- **WiFi 配置**：扫描并连接无线网络
+- **系统信息**：查看内存使用、运行时间等
+
+#### 📶 WiFiConfigApp - WiFi 配置
+- **网络扫描**：自动扫描周围 WiFi 网络
+- **密码输入**：支持虚拟键盘输入密码
+- **连接状态**：实时显示连接状态和 IP 地址
+
+#### 🎨 DemoApp - 演示应用
+- **UI 展示**：展示各种 LVGL 控件效果
+- **性能测试**：测试系统渲染性能
+
 ### 📊 性能指标
 
 | 指标 | 数值 |
@@ -81,6 +119,13 @@ pio run
 pio run --target upload
 ```
 
+#### API 配置（可选）
+如需使用 AI 聊天功能，请复制配置文件：
+```bash
+cp src/api_config_example.h src/api_config.h
+```
+然后编辑 `src/api_config.h`，填入你的 API 密钥。
+
 ### 📁 项目结构
 
 ```
@@ -92,8 +137,14 @@ pio run --target upload
 │   ├── Performance.*      # 性能监控
 │   ├── PowerManager.*     # 功耗管理
 │   ├── AppManager.*       # 应用管理器
+│   ├── ChatApp.*          # AI 聊天应用
+│   ├── FileExplorerApp.*  # 文件管理器
+│   ├── WiFiConfigApp.*    # WiFi 配置应用
 │   ├── SettingsApp.*      # 设置应用
 │   ├── DemoApp.*          # 示例应用
+│   ├── FontApp.*          # 字体管理应用
+│   ├── ZhFont.*           # 中文字体支持
+│   ├── LvZhFont.*         # LVGL 中文渲染
 │   └── lv_conf.h          # LVGL 配置
 ├── include/
 ├── lib/
@@ -133,6 +184,19 @@ class MyApp : public BaseApp {
 };
 ```
 
+### 📝 更新日志
+
+**v3.0.0** - 重大更新
+- 优化 ChatApp AI 聊天功能
+- 改进中文渲染性能
+- 增强系统稳定性
+
+**v2.x 系列** - 功能完善
+- 添加 AI 聊天支持
+- 优化中文字体渲染
+- 改进文件管理器
+- 添加性能监控
+
 ---
 
 ## 🇺🇸 English
@@ -167,10 +231,27 @@ YIYAN-OS is a complete embedded GUI system framework designed for the ESP32-2432
 - **Idle State Management**: Enters Idle state after 30 seconds of inactivity
 - **Deep Sleep**: Light Sleep after 5 minutes, wake via touch or button
 
-#### 💾 Storage System Integration
-- **SPIFFS File System**: Onboard Flash storage for system resources
-- **SD Card Expansion**: Large capacity for user data and media
-- **LVGL File Interface**: Unified access to `F:` (Flash) and `S:` (SD card)
+### 🤖 Built-in Applications
+
+#### 💬 ChatApp - AI Chat
+Supports multiple AI LLM APIs:
+- **DeepSeek API**: Supports deepseek-chat model
+- **GLM-5 API**: Supports Zhipu AI GLM-5 model
+- **SiliconFlow API**: Supports various open-source models
+- **Chinese Input**: Built-in Ziranma input method
+- **Streaming Response**: Real-time AI reply display
+- **Chat History**: View conversation history
+
+#### 📁 FileExplorerApp - File Manager
+- **Dual Storage**: Browse SPIFFS and SD card files
+- **File Operations**: View, copy, move, delete files
+- **Image Preview**: Support BMP, JPG, PNG formats
+- **Text Viewer**: Browse text files
+
+#### ⚙️ SettingsApp - System Settings
+- **Backlight Control**: Manual/Auto/Off modes
+- **WiFi Config**: Scan and connect to wireless networks
+- **System Info**: View memory usage, uptime, etc.
 
 ### 📊 Performance Metrics
 
@@ -204,6 +285,13 @@ pio run
 # Flash firmware
 pio run --target upload
 ```
+
+#### API Configuration (Optional)
+For AI chat functionality, copy the config file:
+```bash
+cp src/api_config_example.h src/api_config.h
+```
+Then edit `src/api_config.h` and add your API key.
 
 ---
 
