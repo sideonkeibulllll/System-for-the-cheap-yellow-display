@@ -14,6 +14,8 @@
 #include "WiFiConfigApp.h"
 #include "FileExplorerApp.h"
 #include "ChatApp.h"
+#include "DictionaryApp.h"
+#include "WordCardApp.h"
 #include "GlobalUI.h"
 #include "LvZhFont.h"
 #include "XFontAdapter.h"
@@ -220,6 +222,20 @@ void setup() {
     chatInfo.type = APP_TYPE_USER;
     chatInfo.enabled = true;
     AppMgr.registerApp("Chat", createChatApp, &chatInfo);
+    
+    app_info_t dictInfo;
+    strncpy(dictInfo.name, "Dictionary", APP_NAME_MAX_LEN - 1);
+    strcpy(dictInfo.icon, LV_SYMBOL_FILE);
+    dictInfo.type = APP_TYPE_USER;
+    dictInfo.enabled = true;
+    AppMgr.registerApp("Dictionary", createDictionaryApp, &dictInfo);
+    
+    app_info_t wordCardInfo;
+    strncpy(wordCardInfo.name, "WordCard", APP_NAME_MAX_LEN - 1);
+    strcpy(wordCardInfo.icon, LV_SYMBOL_EDIT);
+    wordCardInfo.type = APP_TYPE_USER;
+    wordCardInfo.enabled = true;
+    AppMgr.registerApp("WordCard", createWordCardApp, &wordCardInfo);
     
     bsp_rgb_led_set(255, 0, 0);
     delay(200);

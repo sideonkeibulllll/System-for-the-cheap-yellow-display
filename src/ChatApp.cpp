@@ -6,6 +6,7 @@
 #include <SD.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include <ESP.h>
 
 static void onOpenChatCallback(void* user_data) {
     ChatApp* app = (ChatApp*)user_data;
@@ -56,7 +57,9 @@ ChatApp::ChatApp() : BaseApp("Chat") {
     _netTaskHandle = nullptr;
     _pendingMessage[0] = '\0';
     _responseContent[0] = '\0';
+    _reasoningContent[0] = '\0';
     _responseReady = false;
+    _hasReasoning = false;
     _systemPrompt[0] = '\0';
     _promptPath[0] = '\0';
 }
@@ -687,6 +690,93 @@ void ChatApp::addMessage(const char* text, bool isSent) {
     Serial.printf("[ChatApp] Add message: '%s' (sent=%d)\n", text, isSent);
 }
 
+lv_obj_t* ChatApp::createReasoningBubble(const char* text) {
+    if (!text) return nullptr;
+    
+    int textLen = strlen(text);
+    if (textLen == 0) return nullptr;
+    
+    lv_obj_t* bubble = lv_obj_create(_msgContainer);
+    lv_obj_set_width(bubble, 300);
+    lv_obj_set_height(bubble, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(bubble, lv_color_make(0xE8, 0xE8, 0xE8), 0);
+    lv_obj_set_style_bg_opa(bubble, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(bubble, 1, 0);
+    lv_obj_set_style_border_color(bubble, lv_color_make(0xC0, 0xC0, 0xC0), 0);
+    lv_obj_set_style_radius(bubble, 4, 0);
+    lv_obj_set_style_pad_all(bubble, 8, 0);
+    
+    lv_obj_t* title = lv_label_create(bubble);
+    lv_label_set_text(title, "Deep Thinking");
+    lv_obj_set_style_text_color(title, lv_color_make(0x60, 0x60, 0x60), 0);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_12, 0);
+    
+    char* displayText = (char*)malloc(textLen * 4 + 1);
+    if (displayText) {
+        int j = 0;
+        for (int i = 0; i < textLen; i++) {
+            if (text[i] == '\n') {
+                displayText[j++] = ' ';
+                displayText[j++] = ' ';
+                displayText[j++] = ' ';
+                displayText[j++] = ' ';
+            } else {
+                displayText[j++] = text[i];
+            }
+        }
+        displayText[j] = '\0';
+    } else {
+        displayText = (char*)text;
+    }
+    
+    lv_obj_t* label = lv_label_create(bubble);
+    lv_label_set_text(label, displayText);
+    lv_obj_set_style_text_color(label, lv_color_make(0x40, 0x40, 0x40), 0);
+    
+    if (displayText != text) {
+        free(displayText);
+    }
+    
+    if (LvZhFontMgr.isInitialized()) {
+        lv_obj_set_style_text_font(label, LvZhFontMgr.getFont(), 0);
+    } else {
+        lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
+    }
+    
+    lv_label_set_long_mode(label, LV_LABEL_LONG_CLIP);
+    
+    return bubble;
+}
+
+void ChatApp::addMessageWithReasoning(const char* text, const char* reasoning) {
+    if (!text || strlen(text) == 0) return;
+    
+    addMessageToList(text, false);
+    
+    if (reasoning && strlen(reasoning) > 0) {
+        lv_obj_t* reasoningBubble = createReasoningBubble(reasoning);
+        if (reasoningBubble) {
+            lv_obj_set_style_pad_left(reasoningBubble, 5, 0);
+            lv_obj_set_style_pad_right(reasoningBubble, 20, 0);
+        }
+    }
+    
+    lv_color_t bgColor = lv_color_make(0xFF, 0xFF, 0xFF);
+    lv_obj_t* bubble = createMessageBubble(bgColor, text);
+    
+    if (bubble) {
+        lv_obj_set_style_pad_left(bubble, 5, 0);
+        lv_obj_set_style_pad_right(bubble, 20, 0);
+    }
+    
+    if (_dataFolderReady) {
+        appendMessageToFile(text, false);
+    }
+    
+    Serial.printf("[ChatApp] Add message with reasoning: content=%d, reasoning=%d\n", 
+        strlen(text), reasoning ? strlen(reasoning) : 0);
+}
+
 void ChatApp::sendMessage() {
     if (!_inputArea) return;
     
@@ -752,24 +842,105 @@ void ChatApp::onFileSelected(const char* path) {
 }
 
 void ChatApp::onUpdate() {
-    static uint32_t lastCheck = 0;
-    if (_isWaitingResponse && millis() - lastCheck > 2000) {
-        Serial.printf("[ChatApp] onUpdate: waiting=%d, responseReady=%d\n", 
-            _isWaitingResponse, _responseReady);
-        lastCheck = millis();
-    }
-    
-    if (_responseReady) {
-        Serial.printf("[ChatApp] onUpdate: response ready, len=%d\n", strlen(_responseContent));
+    if (_isWaitingResponse && _responseReady) {
         _responseReady = false;
         _isWaitingResponse = false;
         
-        if (_responseContent[0] != '\0') {
-            addMessage(_responseContent, false);
-            Serial.printf("[ChatApp] AI response displayed: %d bytes\n", strlen(_responseContent));
+        if (!_msgContainer) {
+            Serial.println("[ChatApp] onUpdate: msgContainer is null, skipping");
+            return;
+        }
+        
+        if (!SD.exists(CHAT_TEMP_FILE)) {
+            Serial.println("[ChatApp] Temp file not found");
+            addMessage("Error: No response", false);
+            return;
+        }
+        
+        File tempFile = SD.open(CHAT_TEMP_FILE, FILE_READ);
+        if (!tempFile) {
+            Serial.println("[ChatApp] Failed to open temp file");
+            addMessage("Error: Read failed", false);
+            return;
+        }
+        
+        Serial.printf("[ChatApp] Parsing temp file, size=%d bytes\n", tempFile.size());
+        
+        _responseContent[0] = '\0';
+        _reasoningContent[0] = '\0';
+        int contentLen = 0;
+        int reasoningLen = 0;
+        
+        char lineBuf[1024];
+        int linePos = 0;
+        
+        while (tempFile.available() && contentLen < CHAT_MSG_MAX_LEN - 64) {
+            char c = tempFile.read();
+            if (c == '\n') {
+                lineBuf[linePos] = '\0';
+                if (linePos > 0 && lineBuf[linePos-1] == '\r') {
+                    lineBuf[--linePos] = '\0';
+                }
+                
+                if (strncmp(lineBuf, "data: ", 6) == 0) {
+                    const char* data = lineBuf + 6;
+                    if (strcmp(data, "[DONE]") != 0) {
+                        const char* reasoningKey = "\"reasoning_content\":\"";
+                        const char* contentKey = "\"content\":\"";
+                        
+                        const char* reasoningStart = strstr(data, reasoningKey);
+                        if (reasoningStart) {
+                            reasoningStart += strlen(reasoningKey);
+                            const char* reasoningEnd = strstr(reasoningStart, "\"");
+                            if (reasoningEnd && reasoningEnd > reasoningStart) {
+                                int len = reasoningEnd - reasoningStart;
+                                if (reasoningLen + len < CHAT_REASONING_MAX_LEN - 1) {
+                                    memcpy(_reasoningContent + reasoningLen, reasoningStart, len);
+                                    reasoningLen += len;
+                                    _reasoningContent[reasoningLen] = '\0';
+                                }
+                            }
+                        }
+                        
+                        const char* contentStart = strstr(data, contentKey);
+                        if (contentStart) {
+                            contentStart += strlen(contentKey);
+                            const char* contentEnd = strstr(contentStart, "\"");
+                            if (contentEnd && contentEnd > contentStart) {
+                                int len = contentEnd - contentStart;
+                                if (contentLen + len < CHAT_MSG_MAX_LEN - 1) {
+                                    memcpy(_responseContent + contentLen, contentStart, len);
+                                    contentLen += len;
+                                    _responseContent[contentLen] = '\0';
+                                }
+                            }
+                        }
+                    }
+                }
+                linePos = 0;
+            } else if (linePos < 1023) {
+                lineBuf[linePos++] = c;
+            }
+        }
+        
+        tempFile.close();
+        SD.remove(CHAT_TEMP_FILE);
+        
+        Serial.printf("[ChatApp] Parsed: content=%d, reasoning=%d\n", contentLen, reasoningLen);
+        
+        if (contentLen > 0) {
+            if (reasoningLen > 0) {
+                addMessageWithReasoning(_responseContent, _reasoningContent);
+            } else {
+                addMessage(_responseContent, false);
+            }
+            Serial.printf("[ChatApp] AI response displayed: %d bytes\n", contentLen);
+        } else if (reasoningLen == 0) {
+            addMessage("Error: Empty response", false);
         }
         
         _responseContent[0] = '\0';
+        _reasoningContent[0] = '\0';
     }
 }
 
@@ -1270,6 +1441,7 @@ static void jsonEscape(const char* input, char* output, int maxLen) {
 bool ChatApp::performAIRequest(const char* userMessage) {
     const ai_model_config_t& model = AI_MODELS[_selectedModelIndex];
     Serial.printf("[ChatNet] Request to %s\n", model.name);
+    Serial.printf("[ChatNet] Free heap: %d bytes\n", ESP.getFreeHeap());
     
     File tempFile = SD.open(CHAT_TEMP_FILE, FILE_WRITE);
     if (!tempFile) {
@@ -1280,6 +1452,7 @@ bool ChatApp::performAIRequest(const char* userMessage) {
     WiFiClientSecure* client = new WiFiClientSecure();
     client->setInsecure();
     client->setTimeout(30000);
+    client->setHandshakeTimeout(30000);
     
     char host[64];
     int port = 443;
@@ -1300,19 +1473,20 @@ bool ChatApp::performAIRequest(const char* userMessage) {
     
     if (!client->connect(host, port)) {
         Serial.println("[ChatNet] Connection failed");
+        tempFile.println("Error: Connection failed");
         tempFile.close();
-        SD.remove(CHAT_TEMP_FILE);
         delete client;
+        _responseReady = true;
         return false;
     }
     
-    char body[CHAT_INPUT_MAX_LEN + CHAT_PROMPT_MAX_LEN + 512];
-    int bodyLen;
-    
-    static char escapedMsg[CHAT_INPUT_MAX_LEN * 2];
-    static char escapedPrompt[CHAT_PROMPT_MAX_LEN * 2];
+    char escapedMsg[CHAT_INPUT_MAX_LEN * 2];
+    char escapedPrompt[CHAT_PROMPT_MAX_LEN * 2];
     
     jsonEscape(userMessage, escapedMsg, sizeof(escapedMsg));
+    
+    char body[CHAT_INPUT_MAX_LEN + CHAT_PROMPT_MAX_LEN + 512];
+    int bodyLen;
     
     if (_systemPrompt[0] != '\0') {
         jsonEscape(_systemPrompt, escapedPrompt, sizeof(escapedPrompt));
@@ -1326,8 +1500,6 @@ bool ChatApp::performAIRequest(const char* userMessage) {
             model.model, escapedMsg);
     }
     
-    Serial.printf("[ChatNet] Request body: %s\n", body);
-    
     client->printf("POST %s HTTP/1.1\r\n", uri);
     client->printf("Host: %s\r\n", host);
     client->print("Content-Type: application/json\r\n");
@@ -1337,181 +1509,153 @@ bool ChatApp::performAIRequest(const char* userMessage) {
     client->print("\r\n");
     client->print(body);
     
+    Serial.println("[ChatNet] === REQUEST ===");
+    Serial.printf("POST %s HTTP/1.1\n", uri);
+    Serial.printf("Host: %s\n", host);
+    Serial.printf("Content-Length: %d\n", bodyLen);
+    Serial.printf("Body: %s\n", body);
+    Serial.println("[ChatNet] === END REQUEST ===");
     Serial.println("[ChatNet] Request sent, receiving...");
     
-    static char lineBuf[1024];
-    
+    char lineBuf[1024];
     int linePos = 0;
     bool inBody = false;
+    bool isChunked = false;
+    int chunkRemaining = 0;
     uint32_t timeout = millis();
-    uint32_t lastPrint = 0;
+    uint32_t lastDataTime = millis();
     int totalBytes = 0;
+    int sseCount = 0;
+    bool hasReasoning = false;
     
     while (millis() - timeout < 30000) {
         if (client->available()) {
             timeout = millis();
+            lastDataTime = millis();
             char c = client->read();
             totalBytes++;
             
             if (!inBody) {
                 if (c == '\n') {
                     lineBuf[linePos] = '\0';
-                    Serial.printf("[ChatNet] Header: '%s'\n", lineBuf);
-                    if (linePos == 0 || (linePos == 1 && lineBuf[0] == '\r')) {
+                    if (linePos > 0 && lineBuf[linePos-1] == '\r') {
+                        lineBuf[--linePos] = '\0';
+                    }
+                    
+                    Serial.printf("[ChatNet] HDR: %s\n", lineBuf);
+                    
+                    if (strstr(lineBuf, "Transfer-Encoding: chunked") != nullptr) {
+                        isChunked = true;
+                        Serial.println("[ChatNet] Chunked encoding detected");
+                    }
+                    
+                    if (linePos == 0) {
                         inBody = true;
-                        Serial.println("[ChatNet] Headers received, entering body");
+                        Serial.println("[ChatNet] Headers done, entering body");
                     }
                     linePos = 0;
                 } else if (linePos < 1023) {
                     lineBuf[linePos++] = c;
                 }
             } else {
-                if (c == '\n') {
-                    lineBuf[linePos] = '\0';
-                    if (linePos > 0 && lineBuf[0] != '\r') {
-                        tempFile.println(lineBuf);
-                        Serial.printf("[ChatNet] Body line: '%s'\n", lineBuf);
+                if (isChunked) {
+                    if (c == '\n') {
+                        lineBuf[linePos] = '\0';
+                        if (linePos > 0 && lineBuf[linePos-1] == '\r') {
+                            lineBuf[--linePos] = '\0';
+                        }
+                        
+                        if (chunkRemaining == 0) {
+                            int chunkSize = 0;
+                            for (int i = 0; lineBuf[i]; i++) {
+                                char ch = lineBuf[i];
+                                if (ch >= '0' && ch <= '9') {
+                                    chunkSize = chunkSize * 16 + (ch - '0');
+                                } else if (ch >= 'a' && ch <= 'f') {
+                                    chunkSize = chunkSize * 16 + (ch - 'a' + 10);
+                                } else if (ch >= 'A' && ch <= 'F') {
+                                    chunkSize = chunkSize * 16 + (ch - 'A' + 10);
+                                }
+                            }
+                            chunkRemaining = chunkSize;
+                            if (chunkSize == 0) {
+                                Serial.println("[ChatNet] Final chunk received");
+                                break;
+                            }
+                        } else {
+                            if (strncmp(lineBuf, "data: ", 6) == 0) {
+                                const char* data = lineBuf + 6;
+                                if (strcmp(data, "[DONE]") != 0) {
+                                    sseCount++;
+                                    const char* reasoning = strstr(data, "\"reasoning_content\":\"");
+                                    if (reasoning) hasReasoning = true;
+                                    tempFile.println(lineBuf);
+                                    if (sseCount % 10 == 0) {
+                                        vTaskDelay(pdMS_TO_TICKS(1));
+                                    }
+                                } else {
+                                    Serial.println("[ChatNet] Got [DONE]");
+                                    break;
+                                }
+                            }
+                            chunkRemaining = 0;
+                        }
+                        linePos = 0;
+                    } else if (linePos < 1023) {
+                        lineBuf[linePos++] = c;
                     }
-                    linePos = 0;
-                } else if (linePos < 1023) {
-                    lineBuf[linePos++] = c;
+                } else {
+                    if (c == '\n') {
+                        lineBuf[linePos] = '\0';
+                        if (linePos > 0 && lineBuf[linePos-1] == '\r') {
+                            lineBuf[--linePos] = '\0';
+                        }
+                        if (linePos > 0) {
+                            if (strncmp(lineBuf, "data: ", 6) == 0) {
+                                const char* data = lineBuf + 6;
+                                if (strcmp(data, "[DONE]") != 0) {
+                                    sseCount++;
+                                    const char* reasoning = strstr(data, "\"reasoning_content\":\"");
+                                    if (reasoning) hasReasoning = true;
+                                    tempFile.println(lineBuf);
+                                } else {
+                                    Serial.println("[ChatNet] Got [DONE]");
+                                    break;
+                                }
+                            }
+                        }
+                        linePos = 0;
+                    } else if (linePos < 1023) {
+                        lineBuf[linePos++] = c;
+                    }
                 }
             }
         } else if (!client->connected()) {
-            Serial.println("[ChatNet] Server disconnected");
+            Serial.printf("[ChatNet] Server disconnected after %d bytes, %d events\n", totalBytes, sseCount);
+            if (sseCount > 0) {
+                Serial.println("[ChatNet] Have data, processing...");
+            }
             break;
         } else {
-            if (millis() - lastPrint > 5000) {
-                Serial.printf("[ChatNet] Waiting... bytes=%d\n", totalBytes);
-                lastPrint = millis();
+            if (millis() - lastDataTime > 5000) {
+                Serial.printf("[ChatNet] No data for 5s, received %d bytes so far\n", totalBytes);
+                lastDataTime = millis();
             }
+            vTaskDelay(pdMS_TO_TICKS(10));
         }
-        vTaskDelay(pdMS_TO_TICKS(1));
     }
     
-    Serial.printf("[ChatNet] Received %d bytes\n", totalBytes);
+    Serial.printf("[ChatNet] Done: %d bytes, %d SSE events, hasReasoning=%d, heap=%d\n", 
+        totalBytes, sseCount, hasReasoning, ESP.getFreeHeap());
     
     client->stop();
     delete client;
     tempFile.close();
     
-    Serial.println("[ChatNet] Response saved, parsing...");
-    
-    processAIResponse();
-    return true;
-}
-
-void ChatApp::processAIResponse() {
-    if (!SD.exists(CHAT_TEMP_FILE)) {
-        Serial.println("[ChatNet] Temp file not found");
-        strcpy(_responseContent, "Error: No response");
-        _responseReady = true;
-        return;
-    }
-    
-    File tempFile = SD.open(CHAT_TEMP_FILE);
-    if (!tempFile) {
-        Serial.println("[ChatNet] Failed to open temp file");
-        strcpy(_responseContent, "Error: Read failed");
-        _responseReady = true;
-        return;
-    }
-    
-    Serial.printf("[ChatNet] Temp file size: %d bytes\n", tempFile.size());
-    
-    _responseContent[0] = '\0';
-    int contentLen = 0;
-    
-    static char parseBuf[1024];
-    
-    int linePos = 0;
-    int lineCount = 0;
-    
-    while (tempFile.available() && contentLen < CHAT_MSG_MAX_LEN - 64) {
-        char c = tempFile.read();
-        if (c == '\n') {
-            parseBuf[linePos] = '\0';
-            lineCount++;
-            
-            if (lineCount <= 5) {
-                Serial.printf("[ChatNet] Line %d: '%s'\n", lineCount, parseBuf);
-            }
-            
-            int lineLen = strlen(parseBuf);
-            if (lineLen > 0 && parseBuf[lineLen-1] == '\r') {
-                parseBuf[--lineLen] = '\0';
-            }
-            
-            bool isChunkSize = true;
-            for (int i = 0; i < lineLen; i++) {
-                char ch = parseBuf[i];
-                if (!((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F'))) {
-                    isChunkSize = false;
-                    break;
-                }
-            }
-            if (isChunkSize && lineLen > 0 && lineLen <= 4) {
-                linePos = 0;
-                continue;
-            }
-            
-            if (strncmp(parseBuf, "data: ", 6) == 0) {
-                const char* data = parseBuf + 6;
-                if (strcmp(data, "[DONE]") == 0) {
-                    Serial.println("[ChatNet] Got [DONE]");
-                    break;
-                }
-                
-                char content[128];
-                parseSSELine(data, content, sizeof(content));
-                int cLen = strlen(content);
-                if (cLen > 0 && contentLen + cLen < CHAT_MSG_MAX_LEN - 1) {
-                    strcat(_responseContent, content);
-                    contentLen += cLen;
-                }
-            }
-            
-            linePos = 0;
-        } else if (linePos < 1023) {
-            parseBuf[linePos++] = c;
-        }
-    }
-    
-    tempFile.close();
-    SD.remove(CHAT_TEMP_FILE);
-    
+    _hasReasoning = hasReasoning;
     _responseReady = true;
-    Serial.printf("[ChatNet] Parsed response: %d bytes from %d lines\n", contentLen, lineCount);
-}
-
-void ChatApp::parseSSELine(const char* line, char* content, int maxLen) {
-    content[0] = '\0';
     
-    const char* contentStart = strstr(line, "\"reasoning_content\":\"");
-    if (contentStart) {
-        contentStart += 21;
-    } else {
-        contentStart = strstr(line, "\"content\":\"");
-        if (!contentStart) return;
-        contentStart += 11;
-    }
-    
-    int i = 0;
-    while (*contentStart && *contentStart != '"' && i < maxLen - 1) {
-        if (*contentStart == '\\' && *(contentStart + 1) == 'n') {
-            content[i++] = '\n';
-            contentStart += 2;
-        } else if (*contentStart == '\\' && *(contentStart + 1) == '"') {
-            content[i++] = '"';
-            contentStart += 2;
-        } else if (*contentStart == '\\' && *(contentStart + 1) == '\\') {
-            content[i++] = '\\';
-            contentStart += 2;
-        } else {
-            content[i++] = *contentStart++;
-        }
-    }
-    content[i] = '\0';
+    return true;
 }
 
 BaseApp* createChatApp() {
