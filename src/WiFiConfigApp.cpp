@@ -459,11 +459,8 @@ void WiFiConfigApp::startConnect(const char* ssid, const char* password) {
     
     WiFi.disconnect(true);
     delay(100);
-    WiFi.mode(WIFI_OFF);
-    delay(100);
     WiFi.mode(WIFI_STA);
-    delay(100);
-    
+    delay(50);
     WiFi.begin(ssid, password);
 }
 
@@ -736,11 +733,8 @@ void WiFiConfigApp::startLastConnect() {
     
     WiFi.disconnect(true);
     delay(100);
-    WiFi.mode(WIFI_OFF);
-    delay(100);
     WiFi.mode(WIFI_STA);
-    delay(100);
-    
+    delay(50);
     WiFi.begin(_lastSSID, _lastPassword);
     
     Serial.printf("[WiFi] Connecting to last: %s\n", _lastSSID);

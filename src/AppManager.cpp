@@ -359,7 +359,7 @@ void AppManager::createHomeScreen() {
     lv_obj_set_size(_homeScreen, BSP_DISPLAY_WIDTH, BSP_DISPLAY_HEIGHT);
     
     lv_obj_t* title = lv_label_create(_homeScreen);
-    lv_label_set_text(title, "ESP32-AI-Department Project");
+    lv_label_set_text(title, "欢迎回来喵");
     lv_obj_set_style_text_color(title, lv_color_make(0x00, 0xFF, 0x00), 0);
     
     if (LvZhFontMgr.isInitialized()) {

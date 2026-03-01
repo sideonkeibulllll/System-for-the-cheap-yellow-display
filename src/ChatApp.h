@@ -10,8 +10,7 @@
 
 #define CHAT_INPUT_MAX_LEN      200
 #define CHAT_DP_BUFFER_SIZE     24
-#define CHAT_MSG_MAX_LEN        2048
-#define CHAT_REASONING_MAX_LEN  2048
+#define CHAT_MSG_MAX_LEN        1024
 #define CHAT_PATH_MAX_LEN       48
 #define CHAT_PROMPT_MAX_LEN     256
 #define CHAT_TEMP_FILE          "/ChatApp/.response_temp"
@@ -20,7 +19,6 @@
 
 typedef struct ChatMessage {
     char* text;
-    char* reasoning;
     bool isSent;
     struct ChatMessage* next;
 } ChatMessage;
@@ -62,9 +60,7 @@ private:
     TaskHandle_t _netTaskHandle;
     char _pendingMessage[CHAT_INPUT_MAX_LEN];
     char _responseContent[CHAT_MSG_MAX_LEN];
-    char _reasoningContent[CHAT_REASONING_MAX_LEN];
     bool _responseReady;
-    bool _hasReasoning;
     
     char _systemPrompt[CHAT_PROMPT_MAX_LEN];
     char _promptPath[CHAT_PATH_MAX_LEN];
@@ -111,14 +107,10 @@ private:
     void onKeyboardButtonClick(lv_obj_t* btn);
     
     lv_obj_t* createMessageBubble(lv_color_t bgColor, const char* text);
-    lv_obj_t* createReasoningBubble(const char* text);
     void addMessage(const char* text, bool isSent);
-    void addMessageWithReasoning(const char* text, const char* reasoning);
     void sendMessage();
     
     void refreshMessageDisplay();
-    void updateStreamingDisplay();
-    void appendStreamContent(const char* content, bool isReasoning);
     
     void showModelSelector();
     void hideModelSelector();
@@ -129,8 +121,8 @@ private:
     void sendAIRequestAsync(const char* userMessage);
     static void networkTaskEntry(void* arg);
     bool performAIRequest(const char* userMessage);
-    void parseAndAppendSSE(const char* jsonData);
     void processAIResponse();
+    void parseSSELine(const char* line, char* content, int maxLen);
     
 public:
     ChatApp();
